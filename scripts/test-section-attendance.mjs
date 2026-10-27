@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
 const SERVICE_ID = '84a36129-1a53-46ff-9115-d4096a267bd3'
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 

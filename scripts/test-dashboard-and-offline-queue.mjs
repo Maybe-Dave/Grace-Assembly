@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 import path from 'path'
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 const ARTIFACTS_DIR = 'C:\\Users\\WHITESYSTEM\\.gemini\\antigravity-ide\\brain\\105303f6-2bb5-458b-a524-506e149b61fd'
 

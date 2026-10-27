@@ -14,7 +14,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 const SERVICE_ID = '84a36129-1a53-46ff-9115-d4096a267bd3'
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-const PORT = process.env.TEST_PORT || '3001'
+const PORT = process.env.TEST_PORT || '3000'
 const BASE_URL = `http://localhost:${PORT}`
 
 function delay(ms) {
