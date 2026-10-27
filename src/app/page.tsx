@@ -36,11 +36,13 @@ function RooflineMark() {
   )
 }
 
+const OTP_LENGTH = 8
+
 export default function WelcomeSignInPage() {
   const router = useRouter()
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', ''])
+  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''))
   const [greeting, setGreeting] = useState('Good morning')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -106,19 +108,19 @@ export default function WelcomeSignInPage() {
       nextOtp[index] = digits[0]
       setOtp(nextOtp)
       if (error) setError(null)
-      if (index < 5) {
+      if (index < OTP_LENGTH - 1) {
         inputRefs.current[index + 1]?.focus()
       }
     } else {
       // Pasted or autofilled multiple digits
       digits.forEach((d, i) => {
-        if (index + i < 6) {
+        if (index + i < OTP_LENGTH) {
           nextOtp[index + i] = d
         }
       })
       setOtp(nextOtp)
       if (error) setError(null)
-      const nextIdx = Math.min(index + digits.length, 5)
+      const nextIdx = Math.min(index + digits.length, OTP_LENGTH - 1)
       inputRefs.current[nextIdx]?.focus()
     }
   }
@@ -135,7 +137,7 @@ export default function WelcomeSignInPage() {
     } else if (e.key === 'ArrowLeft' && index > 0) {
       e.preventDefault()
       inputRefs.current[index - 1]?.focus()
-    } else if (e.key === 'ArrowRight' && index < 5) {
+    } else if (e.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
       e.preventDefault()
       inputRefs.current[index + 1]?.focus()
     }
@@ -143,18 +145,18 @@ export default function WelcomeSignInPage() {
 
   function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault()
-    const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, 6)
+    const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, OTP_LENGTH)
     if (!pasted) return
 
     const digits = pasted.split('')
-    const nextOtp = ['', '', '', '', '', '']
+    const nextOtp = Array(OTP_LENGTH).fill('')
     digits.forEach((d, i) => {
-      if (i < 6) nextOtp[i] = d
+      if (i < OTP_LENGTH) nextOtp[i] = d
     })
     setOtp(nextOtp)
     if (error) setError(null)
 
-    const nextIdx = Math.min(digits.length, 5)
+    const nextIdx = Math.min(digits.length, OTP_LENGTH - 1)
     inputRefs.current[nextIdx]?.focus()
   }
 
@@ -247,8 +249,8 @@ export default function WelcomeSignInPage() {
     setResendMessage(null)
 
     const trimmedCode = code.trim()
-    if (!trimmedCode || trimmedCode.length < 6) {
-      setError('Please enter the 6-digit verification code.')
+    if (!trimmedCode || trimmedCode.length < OTP_LENGTH) {
+      setError(`Please enter the ${OTP_LENGTH}-digit verification code.`)
       return
     }
 
@@ -332,7 +334,7 @@ export default function WelcomeSignInPage() {
           setError('Unable to resend code right now. Please wait a moment.')
         }
       } else {
-        setResendMessage('A new 6-digit code has been sent to your email.')
+        setResendMessage(`A new ${OTP_LENGTH}-digit code has been sent to your email.`)
         setResendCooldown(30)
       }
     } catch {
@@ -406,7 +408,7 @@ export default function WelcomeSignInPage() {
         <p className="text-[15px] text-[#1F2A24]/65 font-work-sans mb-8 leading-normal">
           {step === 'email'
             ? 'Sign in with your registered church email to receive your sign-in code.'
-            : `We sent a 6-digit verification code to ${email}.`}
+            : `We sent an 8-digit verification code to ${email}.`}
         </p>
 
         {/* Error / Alert banner in #C94F3D (reserved for alerts/errors only) */}
@@ -503,21 +505,21 @@ export default function WelcomeSignInPage() {
             noValidate
             className="space-y-6"
           >
-            {/* 7. Second step: Classic 6-digit OTP boxes + Verify button + Resend code */}
+            {/* 7. Second step: Classic 8-digit OTP boxes + Verify button + Resend code */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-[13px] font-medium text-[#1F2A24]/75 font-work-sans">
                   Verification code
                 </label>
                 <span className="text-[12px] text-[#1F2A24]/50 font-mono">
-                  {otp.filter(Boolean).length}/6
+                  {otp.filter(Boolean).length}/{OTP_LENGTH}
                 </span>
               </div>
 
               <div
-                className="flex items-center justify-between gap-2 sm:gap-3"
+                className="flex items-center justify-between gap-1 sm:gap-2"
                 role="group"
-                aria-label="6-digit verification code"
+                aria-label="8-digit verification code"
               >
                 {otp.map((digit, index) => (
                   <input
@@ -538,7 +540,7 @@ export default function WelcomeSignInPage() {
                     onFocus={(e) => e.target.select()}
                     disabled={loading}
                     aria-label={`Digit ${index + 1}`}
-                    className={`w-11 sm:w-13 h-14 sm:h-15 text-center text-[22px] sm:text-[24px] font-mono font-semibold text-[#1F2A24] bg-[#F7F3EC] rounded-[10px] border-2 outline-none transition-all duration-150 ${
+                    className={`flex-1 min-w-[32px] max-w-[46px] h-12 sm:h-14 text-center text-[18px] sm:text-[22px] font-mono font-semibold text-[#1F2A24] bg-[#F7F3EC] rounded-[8px] sm:rounded-[10px] border-2 outline-none transition-all duration-150 ${
                       error
                         ? 'border-[#C94F3D] text-[#C94F3D] focus:border-[#C94F3D] focus:ring-2 focus:ring-[#C94F3D]/20'
                         : digit
@@ -557,7 +559,7 @@ export default function WelcomeSignInPage() {
                 e.preventDefault()
                 handleVerifyCode(e)
               }}
-              disabled={loading || code.trim().length < 6}
+              disabled={loading || code.trim().length < OTP_LENGTH}
               className="w-full bg-[#A8763E] text-[#F7F3EC] rounded-[10px] p-[16px] text-[16px] font-medium font-work-sans hover:bg-[#976835] active:bg-[#855b2e] disabled:opacity-60 transition-colors cursor-pointer shadow-xs"
             >
               {loading ? 'Verifying…' : 'Verify'}
@@ -580,7 +582,7 @@ export default function WelcomeSignInPage() {
                 type="button"
                 onClick={() => {
                   setStep('email')
-                  setOtp(['', '', '', '', '', ''])
+                  setOtp(Array(OTP_LENGTH).fill(''))
                   setError(null)
                   setResendMessage(null)
                 }}
