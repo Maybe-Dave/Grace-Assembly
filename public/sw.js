@@ -6,6 +6,7 @@ const CACHE_NAME = 'grace-assembly-v1'
 // Files to cache on install (app shell)
 const PRECACHE_URLS = [
   '/',
+  '/attendance',
   '/manifest.json',
 ]
 
@@ -52,10 +53,16 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         // Network failed — serve from cache
-        return caches.match(event.request).then((cached) => {
+        return caches.match(event.request, { ignoreSearch: true }).then((cached) => {
           if (cached) return cached
-          // For navigation requests, serve the cached root
+          // For navigation requests, match the specific route
           if (event.request.mode === 'navigate') {
+            try {
+              const url = new URL(event.request.url)
+              if (url.pathname.startsWith('/attendance')) {
+                return caches.match('/attendance').then((att) => att || caches.match('/'))
+              }
+            } catch (_) {}
             return caches.match('/')
           }
           return new Response('Offline', { status: 503 })

@@ -2,20 +2,23 @@
 
 A Progressive Web App (PWA) for managing attendance at **Grace Assembly**, a ~250-member Nigerian church.
 
-> **Phase 1** — Project skeleton only. This phase sets up the database, environment, and a health-check page. No sign-in UI, no attendance forms, no member management yet.
+> **Phase 3: Attendance Screen**  
+> Complete implementation of the attendance screen at `/attendance`. Includes service header, live debounced search by name/phone with privacy-preserving phone masking (`search_people_for_service` RPC), initials circles, unit tags, circular brass toggles with optimistic UI updates, and sticky bottom live progress bar.
 
 ---
 
 ## Table of Contents
 
 - [Tech Stack](#tech-stack)
+- [Design System](#design-system)
+- [Attendance Screen (Phase 3)](#attendance-screen-phase-3)
 - [Local Setup](#local-setup)
 - [Environment Variables](#environment-variables)
 - [Running Locally](#running-locally)
 - [Database Migrations](#database-migrations)
-- [Role Model](#role-model)
+- [Role Model & Staff Sign-in](#role-model--staff-sign-in)
+- [Seeding Staff Members](#seeding-staff-members)
 - [PWA Verification](#pwa-verification)
-- [Deployment (Vercel)](#deployment-vercel)
 - [Project Structure](#project-structure)
 
 ---
@@ -24,12 +27,60 @@ A Progressive Web App (PWA) for managing attendance at **Grace Assembly**, a ~25
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16 (App Router), TypeScript |
-| Styling | Tailwind CSS 4 |
-| Database & Auth | Supabase (Postgres + GoTrue) |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript |
+| Styling | Tailwind CSS 4 + Bespoke Grace Assembly Design System |
+| Typography | Fraunces 700 & Work Sans 400/500/600 (Google Fonts) |
+| Database & Auth | Supabase (Postgres + Email OTP Auth) |
 | PWA | Custom service worker + Web App Manifest |
 | Hosting | Vercel |
 | Package Manager | npm |
+
+---
+
+## Design System
+
+The app follows a curated aesthetic inspired by architectural church heritage:
+
+### Color Palette
+- `#F7F3EC` — Background (warm plaster)
+- `#1F2A24` — Primary text (deep forest-charcoal)
+- `#6B4226` — Borders / dividers (wood brown)
+- `#A8763E` — Primary accent — buttons & attendance checks ("brass" moment)
+- `#4C6B52` — Secondary accent — links, initials badges, secondary actions (sage green)
+- `#C94F3D` — Alerts / errors only (muted brick red)
+
+### Typography
+- **Headings**: Fraunces, weight 700 (solid display serif)
+- **Body / UI**: Work Sans, weights 400, 500, 600
+
+---
+
+## Attendance Screen (Phase 3)
+
+The attendance screen is located at `/attendance`:
+
+1. **Header (Lighter surface, bottom border)**:
+   - Service name: Fraunces bold 21px (e.g. `Sunday Service`)
+   - Date and time subtitle: `13px` muted text (e.g. `Sunday, 8 Nov • 9:00 AM`)
+   - Chevron icon on the right (visual indicator for future multi-service switching)
+2. **Search Input**:
+   - Search bar with magnifying glass icon and placeholder `"Search by name or phone"`
+   - Debounced (250ms) search calling `search_people_for_service` RPC
+3. **Pill Buttons**:
+   - `"Family check-in"` and `"New visitor"` side-by-side pill buttons (visual only in Phase 3)
+4. **Member List**:
+   - Each row displays:
+     - Initials circle with sage-tinted background (`#4C6B52/15`)
+     - Full name (`16px font-medium #1F2A24`)
+     - Unit tag pill (e.g. Choir, Ushers, Youth, FWI, Men's Fellowship, Children)
+     - **Phone numbers are never shown anywhere on screen**
+5. **Circular Toggles**:
+   - Unmarked: Outlined circle (`border-2 border-[#6B4226]/40`)
+   - Marked present: Filled brass circle (`#A8763E`) with a crisp white checkmark
+   - **Optimistic UI**: Instant state flip and bottom-bar recalculation with automatic rollback on network failure
+6. **Sticky Bottom Bar**:
+   - `"[X] of [Y] marked present • [Z]%"`
+   - Smooth brass progress bar updating in real time
 
 ---
 
@@ -39,7 +90,7 @@ A Progressive Web App (PWA) for managing attendance at **Grace Assembly**, a ~25
 
 - Node.js 18+ (`node --version`)
 - npm 9+
-- A [Supabase](https://supabase.com) project (free tier is fine)
+- A [Supabase](https://supabase.com) project
 
 ### Steps
 
@@ -51,215 +102,67 @@ cd grace-assembly
 # 2. Install dependencies
 npm install
 
-# 3. Copy the example env file and fill in your values
+# 3. Configure environment variables
 cp .env.example .env.local
-# Edit .env.local — see "Environment Variables" below
+# Edit .env.local with your Supabase credentials
 
-# 4. Run the database migrations (see "Database Migrations" below)
+# 4. Run database migrations in your Supabase project (see below)
 
-# 5. Start the dev server
+# 5. Start dev server
 npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) — you should see the health-check page.
-
----
-
-## Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in the three values:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
-```
-
-Find these values in your Supabase dashboard under:  
-**Project Settings → API → Project URL / API Keys**
-
-> ⚠️ **Never commit `.env.local`**. The `.gitignore` already excludes it.  
-> ✅ **Do commit `.env.example`** — it documents which variables are needed (with no real values).
-
-### Vercel
-
-Set the same three variables in **Vercel → Project → Settings → Environment Variables**.
-
----
-
-## Running Locally
-
-```bash
-npm run dev      # Development server with hot reload (http://localhost:3000)
-npm run build    # Production build (only needed before deploy)
-npm run start    # Serve production build locally
-npm run lint     # ESLint check
 ```
 
 ---
 
 ## Database Migrations
 
-Migrations live in `supabase/migrations/` and are plain SQL files. Run them in order against your Supabase project.
+Migrations live in `supabase/migrations/`:
 
-### Option A — Supabase Dashboard SQL Editor
+```
+001_schema.sql              → creates core tables (units, people, services, attendance, pending_members)
+002_seed.sql                → seeds 6 ministry units + initial Sunday service
+003_roles_rls.sql           → creates staff_roles table + RLS policies + people_view
+005_add_email_to_people.sql → adds email column to people table and updates people_view
+006_search_people_rpc.sql   → creates search_people_for_service RPC with phone masking
+```
 
+### Running Migrations via Supabase Dashboard SQL Editor
 1. Open **Supabase Dashboard → SQL Editor**
-2. Run each file in order:
+2. Paste each file's contents in order (`001`, `002`, `003`, `005`, `006`) and click **Run**.
 
-```
-001_schema.sql       → creates all tables
-002_seed.sql         → inserts 6 units + 1 service
-003_roles_rls.sql    → creates staff_roles table + RLS policies
-```
+---
 
-Paste each file's contents into the editor and click **Run**.
+## Role Model & Staff Sign-in
 
-### Option B — Supabase CLI (recommended for CI/CD)
+1. **Staff Email OTP**: Sign-in on `/` uses Supabase 6-digit email OTP.
+2. **Pre-flight Check**: Rejects unregistered emails before sending any code.
+3. **Attendance Entry**: Authenticated staff (admin or usher role) land directly on `/attendance`.
+4. **Session Guard**: Direct unauthenticated access to `/attendance` automatically redirects to `/`.
+
+---
+
+## Seeding Staff Members
+
+To register a staff member so they can sign in:
 
 ```bash
-# Install the CLI (once)
-npm install -g supabase
+# Register an admin
+npm run seed:staff -- "David Dickson" "dicksondave2002@gmail.com" "+2348000000001" "admin"
 
-# Link to your project
-supabase login
-supabase link --project-ref <your-project-ref>
-
-# Push all migrations
-supabase db push
-```
-
-### Verifying the Seed Data
-
-After running migrations, confirm in the SQL editor:
-
-```sql
-select * from units;          -- should return 6 rows
-select * from services;       -- should return 1 row (next Sunday, 09:00)
+# Register an usher
+npm run seed:staff -- "Sister Sarah" "sarah@graceassembly.org" "+2348000000002" "usher"
 ```
 
 ---
 
-## Role Model
+## Cleaning Up Test Data Before Pilot
 
-**We use a dedicated `staff_roles` table** (not JWT custom claims).
+For testing the attendance directory in Phase 3, 12 fictional members across 6 ministry units were seeded.
 
-### Why `staff_roles` over custom claims?
+To purge these test records and their attendance entries before the December pilot without touching real church members:
 
-| Concern | `staff_roles` table | JWT custom claims |
-|---------|--------------------|--------------------|
-| Update a user's role | `UPDATE staff_roles SET role = 'admin' WHERE user_id = ?` | Requires an Edge Function or Auth Hook |
-| No extra infrastructure | ✅ Just SQL | ❌ Needs hook or function deployment |
-| Queryable in RLS policies | ✅ Via `select role from staff_roles where user_id = auth.uid()` | Needs `auth.jwt() ->> 'role'` and claim must be fresh |
-| Realtime role changes | ✅ Immediate (next query reads new role) | ❌ Token must expire/refresh before changes take effect |
-| Future expansion | ✅ Can add columns (unit_id, granted_by, etc.) | ❌ Claims are unstructured JSON |
-
-### Roles
-
-| Role | Permissions |
-|------|-------------|
-| `admin` | Full read/write on all tables |
-| `usher` | Read/write `people` (phone column hidden) and `attendance`; can submit `pending_members` but cannot approve them |
-
-### How phone is hidden from ushers
-
-Postgres RLS cannot redact individual columns — it can only include or exclude rows.  
-To hide `phone` from ushers, we provide a **`people_view`** view:
-
-```sql
-create view people_view as
-select
-  id, full_name,
-  case when current_user_role() = 'admin' then phone else null end as phone,
-  unit_id, household_id, status, created_at
-from people;
+```bash
+npm run cleanup:test-members
 ```
 
-**Ushers must always query `people_view`**, not `people` directly. The direct `people` table is locked to admins only via RLS. This is enforced at the DB level — not just hidden in the UI.
-
-### Adding a user to a role
-
-After a user signs up via Supabase Auth:
-
-```sql
--- Make a user an admin
-insert into staff_roles (user_id, role) values ('<user-uuid>', 'admin');
-
--- Make a user an usher
-insert into staff_roles (user_id, role) values ('<user-uuid>', 'usher');
-```
-
-### Testing usher phone-column restriction
-
-```sql
--- 1. Sign in as the usher user in Supabase Auth
--- 2. Use the usher's JWT in the Authorization header, or test via:
-select * from people_view;
--- The `phone` column should be NULL for all rows when queried as an usher.
--- If you query `people` directly as an usher, you'll get 0 rows (RLS blocks it).
-```
-
----
-
-## PWA Verification
-
-### Manifest
-1. Open Chrome DevTools → **Application** tab → **Manifest**
-2. You should see "Grace Assembly" listed as the app name with icons
-
-### Service Worker
-1. DevTools → **Application** → **Service Workers**
-2. `/sw.js` should appear with status **"Activated and running"**
-3. The `Cache Storage` section (same Application tab) should show `grace-assembly-v1`
-
-### Install prompt (Android / Desktop Chrome)
-- Android Chrome: a "Add to Home Screen" banner should appear
-- Desktop Chrome: an install icon (⊕) appears in the address bar
-- After install, the app opens in standalone mode (no browser chrome)
-
----
-
-## Deployment (Vercel)
-
-1. Push the repo to GitHub
-2. In Vercel, click **Add New Project** → import the repo
-3. Set these environment variables in **Settings → Environment Variables**:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-4. Deploy — the health-check page at `/` should show the real unit count from Supabase
-
----
-
-## Project Structure
-
-```
-grace-assembly/
-├── public/
-│   ├── manifest.json           # PWA Web App Manifest
-│   ├── sw.js                   # Service Worker (network-first + cache fallback)
-│   └── icons/
-│       ├── icon-192x192.png    # PWA icon (Android home screen)
-│       └── icon-512x512.png    # PWA icon (splash screen)
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx          # Root layout (manifest link, PWA meta tags)
-│   │   ├── globals.css         # Global styles + Tailwind import
-│   │   └── page.tsx            # Health-check page (/)
-│   ├── components/
-│   │   └── PWARegister.tsx     # Client component: registers /sw.js
-│   └── lib/
-│       └── supabase/
-│           ├── client.ts       # Browser Supabase client (anon key)
-│           └── admin.ts        # Server-only admin client (service role key)
-├── supabase/
-│   └── migrations/
-│       ├── 001_schema.sql      # Core tables: units, people, services, attendance, pending_members
-│       ├── 002_seed.sql        # Seed data: 6 units + 1 service
-│       └── 003_roles_rls.sql   # staff_roles table + RLS policies + people_view
-├── .env.example                # Template for environment variables (committed)
-├── .env.local                  # Real env vars — NOT committed (gitignored)
-├── next.config.ts
-├── tsconfig.json
-└── README.md
-```
+This runs [`scripts/cleanup-test-members.mjs`](file:///c:/Users/WHITESYSTEM/Desktop/Personal/Church_App/grace-assembly/scripts/cleanup-test-members.mjs), which safely deletes the 12 test records and their attendance history while preserving all real church members and staff accounts.
