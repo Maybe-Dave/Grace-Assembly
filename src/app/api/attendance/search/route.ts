@@ -15,28 +15,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing serviceId' }, { status: 400 })
     }
 
-    // 1. Fetch people: attempt to select section column if present, fallback gracefully if not
+    // 1. Fetch people: attempt to select section and positions column if present
     let peopleData: any[] | null = null
-    const { data: withSection, error: sectionErr } = await supabaseAdmin
+    const { data: withSectionAndPositions, error: sectionErr } = await supabaseAdmin
       .from('people')
-      .select('id, full_name, phone, unit_id, units(name), section')
+      .select('id, full_name, phone, unit_id, units(name), section, positions')
       .eq('status', 'active')
       .order('full_name', { ascending: true })
 
-    if (!sectionErr && withSection) {
-      peopleData = withSection
+    if (!sectionErr && withSectionAndPositions) {
+      peopleData = withSectionAndPositions
     } else {
-      const { data: withoutSection, error: baseErr } = await supabaseAdmin
+      const { data: fallbackPeople, error: fallbackErr } = await supabaseAdmin
         .from('people')
-        .select('id, full_name, phone, unit_id, units(name)')
+        .select('id, full_name, phone, unit_id, units(name), section')
         .eq('status', 'active')
         .order('full_name', { ascending: true })
 
-      if (baseErr) {
-        console.error('Error fetching people:', baseErr)
-        return NextResponse.json({ error: 'Failed to search members' }, { status: 500 })
+      if (!fallbackErr && fallbackPeople) {
+        peopleData = fallbackPeople
+      } else {
+        const { data: withoutSection, error: baseErr } = await supabaseAdmin
+          .from('people')
+          .select('id, full_name, phone, unit_id, units(name)')
+          .eq('status', 'active')
+          .order('full_name', { ascending: true })
+
+        if (baseErr) {
+          console.error('Error fetching people:', baseErr)
+          return NextResponse.json({ error: 'Failed to search members' }, { status: 500 })
+        }
+        peopleData = withoutSection
       }
-      peopleData = withoutSection
     }
 
     // 2. Fetch attendance for this service
@@ -47,7 +57,7 @@ export async function POST(request: Request) {
 
     const presentPersonIds = new Set(attendanceData?.map((a) => a.person_id) ?? [])
 
-    // 3. Map members with proper unit and section defaults
+    // 3. Map members with proper unit, section, and positions defaults
     const allMapped = (peopleData ?? []).map((p: any, idx: number) => {
       const rawUnit = p.units?.name
       const unitName = rawUnit || 'Member'
@@ -63,12 +73,15 @@ export async function POST(request: Request) {
         section = 'Adults & Youth'
       }
 
+      const positions: string[] = Array.isArray(p.positions) ? p.positions : []
+
       return {
         id: p.id,
         full_name: p.full_name,
         phone: p.phone,
         unit_name: unitName,
         section,
+        positions,
         is_present: presentPersonIds.has(p.id),
       }
     })
@@ -93,19 +106,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Filter by section if scoped (usher assigned_section or admin filter)
+    // 5. Filter by section if scoped (attendance_staff assigned_section or admin filter)
     let filteredPeople = allMapped
     if (targetSection && targetSection !== 'all' && targetSection !== 'All Sections') {
       filteredPeople = allMapped.filter((p) => p.section === targetSection)
     }
 
-    // 6. Filter by search query if provided (matches name or phone securely)
+    // 6. Filter by search query if provided (matches name, phone, unit, or positions)
     if (query) {
       filteredPeople = filteredPeople.filter((p) => {
         const nameMatch = p.full_name.toLowerCase().includes(query)
         const phoneMatch = p.phone ? p.phone.toLowerCase().includes(query) : false
         const unitMatch = (p.unit_name ?? '').toLowerCase().includes(query)
-        return nameMatch || phoneMatch || unitMatch
+        const positionsMatch = Array.isArray(p.positions) && p.positions.some((pos: string) => pos.toLowerCase().includes(query))
+        return nameMatch || phoneMatch || unitMatch || positionsMatch
       })
     }
 

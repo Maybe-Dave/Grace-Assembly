@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import AppShell from '@/components/layout/AppShell'
+import PageHeader from '@/components/layout/PageHeader'
 
 interface PendingPerson {
   id: string
@@ -113,7 +115,7 @@ export default function HeadUsherApprovalPage() {
             const devRes = await fetch('/api/auth/dev-login', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: 'head_usher' }),
+              body: JSON.stringify({ role: 'attendance_admin' }),
             })
             if (devRes.ok) {
               const devData = await devRes.json()
@@ -136,7 +138,7 @@ export default function HeadUsherApprovalPage() {
         setAuthToken(session.access_token)
 
         // Read user role from /api/auth/me
-        let role = 'head_usher'
+        let role = 'attendance_admin'
         try {
           const profileRes = await fetch('/api/auth/me', {
             method: 'POST',
@@ -158,7 +160,7 @@ export default function HeadUsherApprovalPage() {
 
         setUserRole(role)
 
-        if (['head_usher', 'admin', 'pastor', 'secretary'].includes(role)) {
+        if (['super_admin', 'attendance_admin'].includes(role)) {
           await loadPendingList(session.access_token)
         }
       } finally {
@@ -221,104 +223,61 @@ export default function HeadUsherApprovalPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] flex items-center justify-center p-6">
-        <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading approval queue…</p>
-      </main>
+      <AppShell userRole={userRole} userName={userName}>
+        <div className="flex items-center justify-center py-24 text-center">
+          <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading approval queue…</p>
+        </div>
+      </AppShell>
     )
   }
 
-  // Access control restriction: Only head usher and admin can approve
-  if (!['head_usher', 'admin', 'pastor', 'secretary'].includes(userRole)) {
+  // Access control restriction: Only super_admin and attendance_admin can approve
+  if (!['super_admin', 'attendance_admin'].includes(userRole)) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-full max-w-[440px] bg-[#FDFBF7] border border-[#6B4226]/20 rounded-[16px] p-6 shadow-sm space-y-4">
-          <div className="w-12 h-12 rounded-full bg-[#A8763E]/15 text-[#A8763E] flex items-center justify-center mx-auto text-[20px] font-bold">
-            🔒
-          </div>
-          <h2 className="font-fraunces text-[22px] font-bold text-[#1F2A24]">
-            Head Usher Access Required
-          </h2>
-          <p className="text-[14px] text-[#1F2A24]/70 leading-relaxed">
-            Only accounts with the <strong>Head Usher</strong> role specifically review and approve
-            new person and visitor intake submissions.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/attendance"
-              className="inline-block w-full py-2.5 px-4 rounded-[10px] bg-[#A8763E] text-[#F7F3EC] text-[14px] font-medium font-work-sans hover:bg-[#976835] transition-colors"
-            >
-              Return to Attendance Screen
-            </Link>
+      <AppShell userRole={userRole} userName={userName}>
+        <div className="w-full max-w-[460px] mx-auto py-16 px-4 text-center">
+          <div className="bg-[#FDFBF7] border border-[#6B4226]/20 rounded-[16px] p-6 shadow-sm space-y-4">
+            <div className="w-12 h-12 rounded-full bg-[#A8763E]/15 text-[#A8763E] flex items-center justify-center mx-auto text-[20px] font-bold">
+              🔒
+            </div>
+            <h2 className="font-fraunces text-[22px] font-bold text-[#1F2A24]">
+              Approval Access Required
+            </h2>
+            <p className="text-[14px] text-[#1F2A24]/70 leading-relaxed">
+              Only accounts with the <strong>Super Admin</strong> or <strong>Attendance Admin</strong> role review and approve
+              new person and visitor intake submissions.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/attendance"
+                className="inline-block w-full py-2.5 px-4 rounded-[10px] bg-[#A8763E] text-[#F7F3EC] text-[14px] font-medium font-work-sans hover:bg-[#976835] transition-colors"
+              >
+                Return to Attendance Screen
+              </Link>
+            </div>
           </div>
         </div>
-      </main>
+      </AppShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col justify-between selection:bg-[#A8763E]/20">
-      <div className="w-full max-w-[680px] mx-auto px-5 py-6 flex-1 flex flex-col">
-        {/* Navigation Bar */}
-        <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-[#6B4226]/15">
-          <Link
-            href="/attendance"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4C6B52] hover:underline"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            <span>Back to Attendance</span>
-          </Link>
-
-          <Link
-            href="/intake"
-            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#A8763E] bg-[#A8763E]/12 px-3 py-1 rounded-full border border-[#A8763E]/25 hover:bg-[#A8763E]/20 transition-colors shadow-2xs"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>New Intake Form</span>
-          </Link>
+    <AppShell userRole={userRole} userName={userName}>
+      <div className="w-full max-w-5xl mx-auto py-2 flex-1 flex flex-col space-y-6">
+        {/* Minimal Clean Header: Title + Subtitle only */}
+        <PageHeader
+          title="Intake Approvals Queue"
+          subtitle="Review and verify visitor and new attendee intake records."
+        />
+        <div className="flex items-center justify-between text-[12px] bg-[#FDFBF7] p-3 rounded-[10px] border border-[#6B4226]/15 text-[#1F2A24]/75">
+          <span>
+            Pending Submissions:{' '}
+            <strong className="text-[#A8763E] font-bold text-[13px]">{pendingList.length}</strong>
+          </span>
+          <span className="text-[#1F2A24]/50">
+            Approved members are instantly added to their seating room attendance.
+          </span>
         </div>
-
-        {/* 1. Header */}
-        <header className="mb-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="font-fraunces text-[24px] font-bold text-[#1F2A24] leading-tight tracking-tight">
-                Head Usher Approval Queue
-              </h1>
-              <p className="text-[13px] text-[#1F2A24]/65 font-work-sans mt-0.5">
-                Review visitor & new attendee intake forms submitted by ushers across all rooms.
-              </p>
-            </div>
-
-            <span className="shrink-0 text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-[#A8763E]/15 text-[#A8763E] border border-[#A8763E]/30 select-none">
-              Head Usher
-            </span>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between text-[12px] bg-[#FDFBF7] p-2.5 rounded-[10px] border border-[#6B4226]/15 text-[#1F2A24]/75">
-            <span>
-              Pending Submissions:{' '}
-              <strong className="text-[#A8763E] font-bold text-[13px]">{pendingList.length}</strong>
-            </span>
-            <span className="text-[#1F2A24]/50">
-              Approved members are instantly added to their seating room attendance.
-            </span>
-          </div>
-        </header>
 
         {/* Feedback / Toast Banner */}
         {actionFeedback && (
@@ -545,10 +504,6 @@ export default function HeadUsherApprovalPage() {
           )}
         </main>
       </div>
-
-      <footer className="w-full max-w-[680px] mx-auto px-5 py-4 text-center text-[12px] text-[#1F2A24]/50 border-t border-[#6B4226]/10">
-        Grace Assembly Church Management · Head Usher Approval Queue
-      </footer>
-    </div>
+    </AppShell>
   )
 }

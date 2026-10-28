@@ -13,6 +13,14 @@ export const metadata: Metadata = {
   title: 'Grace Assembly',
   description: 'Church attendance management for Grace Assembly',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/icons/icon-192x192.png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',

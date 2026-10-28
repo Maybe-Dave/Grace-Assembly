@@ -57,14 +57,14 @@ export async function GET(request: Request) {
       callerRole = devRoleHeader
     }
 
-    // STRICT PERMISSION CHECK: Only 'pastor' and 'secretary' are permitted.
-    // admin, head_usher, usher, and unauthenticated callers MUST get 403.
-    const ALLOWED_STAFF_APPROVAL_ROLES = ['pastor', 'secretary']
+    // STRICT PERMISSION CHECK: super_admin ONLY.
+    // Domain admins (e.g. attendance_admin), staff, and unauthenticated callers MUST get 403.
+    const ALLOWED_STAFF_APPROVAL_ROLES = ['super_admin']
     if (!callerRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(callerRole)) {
       return NextResponse.json(
         {
           error:
-            'Forbidden: Pastor or Secretary role required to access staff approvals. Admin, Head Usher, and Usher roles are not permitted.',
+            'Forbidden: Super Admin role required to access staff approvals. Domain admins and staff roles are not permitted.',
           callerRole: callerRole || 'unauthenticated',
         },
         { status: 403 }

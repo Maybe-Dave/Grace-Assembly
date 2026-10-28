@@ -57,10 +57,11 @@ export async function GET(request: Request) {
       }
     } catch (_) {}
 
-    // Role check: ONLY head_usher is permitted
-    if (callerRole !== 'head_usher') {
+    // Role check: super_admin and attendance_admin are permitted
+    const ALLOWED_INTAKE_ROLES = ['super_admin', 'attendance_admin']
+    if (!callerRole || !ALLOWED_INTAKE_ROLES.includes(callerRole)) {
       return NextResponse.json(
-        { error: 'Forbidden: head_usher role required to view the approval queue.' },
+        { error: 'Forbidden: super_admin or attendance_admin role required to view the approval queue.' },
         { status: 403 }
       )
     }

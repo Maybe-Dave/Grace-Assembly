@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import AppShell from '@/components/layout/AppShell'
+import PageHeader from '@/components/layout/PageHeader'
 import {
   enqueueAttendance,
   getQueuedAttendance,
@@ -29,6 +31,7 @@ interface MemberAttendance {
   full_name: string
   unit_name: string | null
   section?: string
+  positions?: string[]
   is_present: boolean
 }
 
@@ -105,14 +108,17 @@ export default function AttendanceScreen() {
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [userName, setUserName] = useState<string>('Staff Usher')
-  const [userRole, setUserRole] = useState<string>('usher')
+  const [userName, setUserName] = useState<string>('Staff Member')
+  const [userRole, setUserRole] = useState<string>('attendance_staff')
   const [assignedSection, setAssignedSection] = useState<string>('Adults & Youth')
   const [selectedSection, setSelectedSection] = useState<string>('Adults & Youth')
   const [service, setService] = useState<ChurchService | null>(null)
 
   // Members list currently loaded for the active section/scope
   const [allMembers, setAllMembers] = useState<MemberAttendance[]>([])
+
+  // Selected person for profile detail view modal
+  const [selectedPersonForProfile, setSelectedPersonForProfile] = useState<MemberAttendance | null>(null)
 
   // Live running totals per room across the entire church
   const [roomStats, setRoomStats] = useState<Record<string, RoomStats>>({
@@ -314,7 +320,7 @@ export default function AttendanceScreen() {
         }
 
         // Fetch profile to get role & assigned_section
-        let role = 'usher'
+        let role = 'attendance_staff'
         let assignedSec = 'Adults & Youth'
 
         if (online) {
@@ -336,7 +342,7 @@ export default function AttendanceScreen() {
               if (profile?.name) setUserName(profile.name)
               if (profile?.assigned_section) assignedSec = profile.assigned_section
 
-              if (['head_usher', 'admin', 'pastor', 'secretary'].includes(role)) {
+              if (['super_admin', 'attendance_admin'].includes(role)) {
                 fetch('/api/intake/pending', {
                   headers: { Authorization: `Bearer ${session.access_token}` },
                 })
@@ -352,12 +358,13 @@ export default function AttendanceScreen() {
           }
         }
 
+        const isAdminScope = ['super_admin', 'attendance_admin'].includes(role)
         if (isMounted) {
           setUserRole(role)
           setAssignedSection(assignedSec)
-          const initialScope = role === 'admin' ? 'All Sections' : assignedSec
+          const initialScope = isAdminScope ? 'All Sections' : assignedSec
           setSelectedSection(initialScope)
-          setVisitorSection(role === 'admin' ? 'Adults & Youth' : assignedSec)
+          setVisitorSection(isAdminScope ? 'Adults & Youth' : assignedSec)
         }
 
         // Fetch active church service
@@ -384,7 +391,7 @@ export default function AttendanceScreen() {
 
         if (isMounted && activeService) {
           setService(activeService)
-          const initialScope = role === 'admin' ? 'All Sections' : assignedSec
+          const initialScope = isAdminScope ? 'All Sections' : assignedSec
           await loadSectionMembers(activeService.id, initialScope, isMounted)
 
           if (online && initialQueuedCount > 0) {
@@ -531,7 +538,8 @@ export default function AttendanceScreen() {
       const name = person.full_name.toLowerCase()
       const unit = (person.unit_name ?? '').toLowerCase()
       const sec = (person.section ?? '').toLowerCase()
-      return tokens.every((t) => name.includes(t) || unit.includes(t) || sec.includes(t))
+      const pos = (person.positions ?? []).map((p) => p.toLowerCase()).join(' ')
+      return tokens.every((t) => name.includes(t) || unit.includes(t) || sec.includes(t) || pos.includes(t))
     })
 
     if (hasDigits && phoneSearchResults && phoneSearchResults.length > 0) {
@@ -732,161 +740,49 @@ export default function AttendanceScreen() {
 
   if (loading && !service) {
     return (
-      <main className="min-h-screen w-full bg-[#F7F3EC] flex items-center justify-center p-6">
-        <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">
-          Loading attendance service…
-        </p>
-      </main>
+      <AppShell
+        userRole={userRole}
+        userName={userName}
+        userEmail={userEmail || ''}
+        assignedSection={assignedSection}
+      >
+        <div className="flex items-center justify-center py-20 text-center">
+          <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">
+            Loading attendance service…
+          </p>
+        </div>
+      </AppShell>
     )
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col justify-between selection:bg-[#A8763E]/20">
-      <div className="w-full max-w-[640px] mx-auto flex-1 flex flex-col">
-        {/* 1. Header with Service Info & User Badge */}
-        <header className="sticky top-0 z-20 bg-[#FDFBF7] border-b border-[#6B4226]/15 px-5 py-3.5 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-fraunces text-[20px] font-bold text-[#1F2A24] leading-tight tracking-tight">
-                  {service ? service.type : 'Sunday Service'}
-                </h1>
-                {userRole === 'admin' ? (
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#A8763E]/15 text-[#A8763E] border border-[#A8763E]/30">
-                    Admin
-                  </span>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#4C6B52]/12 text-[#4C6B52] border border-[#4C6B52]/20">
-                      {assignedSection}
-                    </span>
-                    {/* Header Sync Status Indicator next to usher's section name */}
-                    {pendingSyncCount > 0 ? (
-                      <span
-                        id="header-sync-status"
-                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#A8763E] bg-[#A8763E]/12 px-2 py-0.5 rounded-full border border-[#A8763E]/25 animate-pulse"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#A8763E]" />
-                        <span>{pendingSyncCount} pending</span>
-                      </span>
-                    ) : (
-                      <span
-                        id="header-sync-status"
-                        className="inline-flex items-center gap-1 text-[10px] font-medium text-[#4C6B52] bg-[#4C6B52]/10 px-2 py-0.5 rounded-full border border-[#4C6B52]/20"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#4C6B52]" />
-                        <span>Synced</span>
-                      </span>
-                    )}
-                  </div>
-                )}
+    <AppShell
+      userRole={userRole}
+      userName={userName}
+      userEmail={userEmail || ''}
+      assignedSection={assignedSection}
+      pendingSyncCount={pendingSyncCount}
+      isOnline={isOnline}
+    >
+      <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col space-y-5">
+        {/* Minimal Clean Page Header: Bold title + Date subtitle only */}
+        <PageHeader
+          title={service ? service.type : 'Sunday Service'}
+          subtitle={service ? formatServiceDate(service.service_date, service.service_time) : 'Upcoming Service'}
+        />
+
+        {/* Section Heading & Scope Controls */}
+        <div className="bg-[#FDFBF7] border border-[#6B4226]/15 rounded-[14px] p-4 shadow-2xs space-y-3">
+          {userRole === 'super_admin' || userRole === 'attendance_admin' ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-[#1F2A24]/70">
+                  Select Section Roster
+                </span>
+                <span className="text-[12px] font-bold text-[#A8763E]">
+                  Church Total: {roomStats.total?.present || 0} / {roomStats.total?.total || 0} present
+                </span>
               </div>
-              <p className="text-[13px] text-[#1F2A24]/60 font-work-sans mt-0.5">
-                {service
-                  ? formatServiceDate(service.service_date, service.service_time)
-                  : 'Upcoming Service'}
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2.5">
-              {['admin', 'pastor', 'secretary'].includes(userRole) && (
-                <Link
-                  href="/dashboard"
-                  id="dashboard-header-link"
-                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#4C6B52] bg-[#4C6B52]/12 px-2.5 py-1 rounded-full border border-[#4C6B52]/25 hover:bg-[#4C6B52]/20 transition-colors shadow-2xs"
-                  title="Admin Combined Attendance Dashboard"
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="3" y="3" width="7" height="9" />
-                    <rect x="14" y="3" width="7" height="5" />
-                    <rect x="14" y="12" width="7" height="9" />
-                    <rect x="3" y="16" width="7" height="5" />
-                  </svg>
-                  <span>Dashboard</span>
-                </Link>
-              )}
-
-              <Link
-                href="/intake"
-                id="intake-header-link"
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#4C6B52] bg-[#4C6B52]/10 px-2.5 py-1 rounded-full border border-[#4C6B52]/20 hover:bg-[#4C6B52]/20 transition-colors shadow-2xs"
-                title="Full New Person Intake form"
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Intake</span>
-              </Link>
-
-              {['head_usher', 'admin', 'pastor', 'secretary'].includes(userRole) && (
-                <Link
-                  href="/approvals"
-                  id="review-queue-header-link"
-                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#A8763E] bg-[#A8763E]/12 px-2.5 py-1 rounded-full border border-[#A8763E]/25 hover:bg-[#A8763E]/20 transition-colors shadow-2xs"
-                  title="Head Usher Approval Queue"
-                >
-                  <span>Queue</span>
-                  {pendingQueueCount > 0 && (
-                    <span className="w-4 h-4 rounded-full bg-[#A8763E] text-[#FDFBF7] text-[10px] font-bold flex items-center justify-center">
-                      {pendingQueueCount}
-                    </span>
-                  )}
-                </Link>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSignOut}
-                disabled={signingOut}
-                className="text-[12px] text-[#4C6B52] font-medium hover:underline cursor-pointer"
-                title={`Signed in as ${userEmail} (${userRole})`}
-              >
-                {signingOut ? 'Signing out…' : 'Sign out'}
-              </button>
-
-              <div
-                className="w-8 h-8 rounded-full bg-[#1F2A24]/5 flex items-center justify-center text-[#1F2A24]/50"
-                aria-label="Staff profile active"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {/* Admin Room Running Totals Bar & Section Pills */}
-          {userRole === 'admin' && (
-            <div className="mt-3 pt-3 border-t border-[#6B4226]/10 space-y-2.5">
               {/* Section Switcher Tabs */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[12px] font-medium">
                 {['All Sections', ...ALL_SECTIONS].map((sec) => {
@@ -908,60 +804,53 @@ export default function AttendanceScreen() {
                 })}
               </div>
 
-              {/* Admin Room-by-Room Live Running Totals Bar */}
-              <div className="bg-[#F7F3EC] border border-[#6B4226]/15 rounded-[10px] p-2.5">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#1F2A24]/65">
-                    Live Room Totals
-                  </span>
-                  <span className="text-[12px] font-bold text-[#A8763E]">
-                    Church Total: {roomStats.total?.present || 0} / {roomStats.total?.total || 0}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12px]">
-                  {ALL_SECTIONS.map((sec) => {
-                    const st = roomStats[sec] || { total: 0, present: 0 }
-                    const secPct = st.total > 0 ? Math.round((st.present / st.total) * 100) : 0
-                    return (
-                      <div
-                        key={sec}
-                        className={`p-1.5 rounded-[6px] border ${
-                          selectedSection === sec
-                            ? 'bg-[#A8763E]/10 border-[#A8763E]/40 font-medium'
-                            : 'bg-[#FDFBF7] border-[#6B4226]/10'
-                        }`}
-                      >
-                        <div className="text-[11px] text-[#1F2A24]/70 truncate">{sec}</div>
-                        <div className="text-[12px] font-bold text-[#1F2A24] flex items-center justify-between mt-0.5">
-                          <span>
-                            {st.present} / {st.total}
-                          </span>
-                          <span className="text-[10px] font-normal text-[#4C6B52]">{secPct}%</span>
-                        </div>
+              {/* Admin Room-by-Room Live Running Totals Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12px] pt-1">
+                {ALL_SECTIONS.map((sec) => {
+                  const st = roomStats[sec] || { total: 0, present: 0 }
+                  const secPct = st.total > 0 ? Math.round((st.present / st.total) * 100) : 0
+                  return (
+                    <div
+                      key={sec}
+                      className={`p-2 rounded-[8px] border transition-colors ${
+                        selectedSection === sec
+                          ? 'bg-[#A8763E]/10 border-[#A8763E]/40 font-medium'
+                          : 'bg-[#F7F3EC] border-[#6B4226]/10'
+                      }`}
+                    >
+                      <div className="text-[11px] text-[#1F2A24]/70 truncate">{sec}</div>
+                      <div className="text-[13px] font-bold text-[#1F2A24] flex items-center justify-between mt-0.5">
+                        <span>
+                          {st.present} / {st.total}
+                        </span>
+                        <span className="text-[11px] font-semibold text-[#4C6B52]">{secPct}%</span>
                       </div>
-                    )
-                  })}
-                </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+              <div>
+                <span className="text-[11px] uppercase font-bold tracking-wider text-[#1F2A24]/50 block">
+                  Assigned Section Roster
+                </span>
+                <h2 className="font-fraunces text-[18px] sm:text-[20px] font-bold text-[#1F2A24]">
+                  {assignedSection}
+                </h2>
+              </div>
+              <div className="text-left sm:text-right">
+                <span className="text-[12px] font-semibold text-[#4C6B52] bg-[#4C6B52]/10 px-2.5 py-1 rounded-full border border-[#4C6B52]/20">
+                  {presentCount} of {totalCount} present ({percent}%)
+                </span>
               </div>
             </div>
           )}
-
-          {/* Usher assigned section banner */}
-          {userRole !== 'admin' && (
-            <div className="mt-2.5 pt-2 border-t border-[#6B4226]/10 flex items-center justify-between text-[13px]">
-              <span className="text-[#1F2A24]/70">
-                Seating Room:{' '}
-                <strong className="text-[#1F2A24] font-semibold">{assignedSection}</strong>
-              </span>
-              <span className="text-[11px] text-[#4C6B52] font-medium bg-[#4C6B52]/10 px-2 py-0.5 rounded-full">
-                Dedicated Section Scoped
-              </span>
-            </div>
-          )}
-        </header>
+        </div>
 
         {/* Sub-header controls (Search & "New visitor" action) */}
-        <section className="px-5 pt-3.5 pb-2.5 space-y-3 bg-[#F7F3EC]">
+        <section className="space-y-3">
           <div className="flex items-center gap-2.5">
             {/* Search Input */}
             <div className="relative flex-1">
@@ -1099,7 +988,11 @@ export default function AttendanceScreen() {
                     className="py-3 flex items-center justify-between gap-3 transition-colors hover:bg-[#FDFBF7]/50 rounded-[8px] px-1"
                   >
                     {/* Left: Initials circle + Name + Unit & Section badges */}
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      onClick={() => setSelectedPersonForProfile(person)}
+                      className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer group"
+                      title="View member profile"
+                    >
                       <div
                         className="w-10 h-10 rounded-full bg-[#4C6B52]/15 text-[#4C6B52] font-semibold text-[14px] flex items-center justify-center shrink-0 tracking-wide select-none"
                         aria-hidden="true"
@@ -1175,7 +1068,7 @@ export default function AttendanceScreen() {
 
       {/* 2. Sticky bottom bar with Section Name + Sync State indicator */}
       <footer className="sticky bottom-0 z-30 w-full border-t border-[#6B4226]/15 bg-[#FDFBF7]/95 backdrop-blur-md shadow-lg">
-        <div className="w-full max-w-[640px] mx-auto px-5 py-3">
+        <div className="w-full max-w-5xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between text-[13px] font-medium text-[#1F2A24] font-work-sans mb-1.5">
             <span>
               <strong className="text-[14px] text-[#1F2A24]">{presentCount}</strong> of{' '}
@@ -1621,6 +1514,95 @@ export default function AttendanceScreen() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* 4. Minimal Person Profile / Detail Modal */}
+      {selectedPersonForProfile && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          id="person-profile-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1F2A24]/40 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-[420px] bg-[#FDFBF7] border border-[#6B4226]/20 rounded-[16px] shadow-2xl p-6 flex flex-col space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-[#4C6B52]/15 text-[#4C6B52] font-semibold text-[16px] flex items-center justify-center tracking-wide">
+                  {getInitials(selectedPersonForProfile.full_name)}
+                </div>
+                <div>
+                  <h2 className="font-fraunces text-[20px] font-bold text-[#1F2A24]">
+                    {selectedPersonForProfile.full_name}
+                  </h2>
+                  <p className="text-[12px] text-[#1F2A24]/60 font-work-sans">
+                    {selectedPersonForProfile.unit_name || 'Member'} &middot; {selectedPersonForProfile.section || 'General'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="close-person-profile-btn"
+                onClick={() => setSelectedPersonForProfile(null)}
+                className="text-[#1F2A24]/40 hover:text-[#1F2A24] p-1 cursor-pointer"
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="border-t border-[#6B4226]/10 pt-3 space-y-3">
+              <div>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#1F2A24]/60 block mb-1">
+                  Service Attendance
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full ${
+                    selectedPersonForProfile.is_present
+                      ? 'bg-[#4C6B52]/15 text-[#4C6B52]'
+                      : 'bg-[#1F2A24]/10 text-[#1F2A24]/65'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      selectedPersonForProfile.is_present ? 'bg-[#4C6B52]' : 'bg-[#1F2A24]/40'
+                    }`}
+                  />
+                  {selectedPersonForProfile.is_present ? 'Present' : 'Not marked present'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#1F2A24]/60 block mb-1.5">
+                  Positions &amp; Units
+                </span>
+                {selectedPersonForProfile.positions && selectedPersonForProfile.positions.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedPersonForProfile.positions.map((pos) => (
+                      <span
+                        key={pos}
+                        className="px-2.5 py-1 text-[12px] font-medium bg-[#A8763E]/12 text-[#6B4226] rounded-full border border-[#A8763E]/25"
+                      >
+                        {pos}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[#1F2A24]/50 italic">No specific leadership positions assigned.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedPersonForProfile(null)}
+                className="w-full py-2.5 px-4 rounded-[10px] bg-[#F7F3EC] border border-[#6B4226]/20 text-[#1F2A24] text-[13px] font-medium hover:bg-[#6B4226]/5 transition-colors cursor-pointer"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AppShell>
   )
 }

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import AppShell from '@/components/layout/AppShell'
+import PageHeader from '@/components/layout/PageHeader'
 
 const ALL_SECTIONS = ['Adults & Youth', 'Infants', 'Older Children', 'Teenagers'] as const
 const ALL_UNITS = [
@@ -51,7 +53,7 @@ export default function NewPersonIntakePage() {
   // Current collector session context
   const [collectorName, setCollectorName] = useState('Staff Usher')
   const [collectorSection, setCollectorSection] = useState('Adults & Youth')
-  const [collectorRole, setCollectorRole] = useState('usher')
+  const [collectorRole, setCollectorRole] = useState('attendance_staff')
   const [authToken, setAuthToken] = useState('')
 
   // Form Fields
@@ -232,69 +234,39 @@ export default function NewPersonIntakePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] flex items-center justify-center p-6">
-        <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading intake form…</p>
-      </main>
+      <AppShell
+        userRole={collectorRole}
+        userName={collectorName}
+        assignedSection={collectorSection}
+      >
+        <div className="flex items-center justify-center py-24 text-center">
+          <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading intake form…</p>
+        </div>
+      </AppShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col justify-between selection:bg-[#A8763E]/20">
-      <div className="w-full max-w-[540px] mx-auto px-5 py-6 flex-1 flex flex-col">
-        {/* Top Navigation Bar */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#6B4226]/15">
-          <Link
-            href="/attendance"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4C6B52] hover:underline"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            <span>Back to Attendance</span>
-          </Link>
+    <AppShell
+      userRole={collectorRole}
+      userName={collectorName}
+      assignedSection={collectorSection}
+    >
+      <div className="w-full max-w-[560px] mx-auto py-2 flex-1 flex flex-col space-y-6">
+        {/* Minimal Clean Header: Title + Subtitle only */}
+        <PageHeader
+          title="New Member Intake"
+          subtitle="Register visitors and new attendees during or after service."
+        />
 
-          {['head_usher', 'admin', 'pastor', 'secretary'].includes(collectorRole) && (
-            <Link
-              href="/approvals"
-              className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#A8763E] bg-[#A8763E]/12 px-2.5 py-1 rounded-full border border-[#A8763E]/25 hover:bg-[#A8763E]/20 transition-colors"
-            >
-              <span>Review Queue</span>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </Link>
-          )}
+        {/* Collector Context Pill (Auto-filled, Not Editable) */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] bg-[#FDFBF7] border border-[#6B4226]/20 text-[12.5px] text-[#1F2A24]/75 shadow-2xs self-start">
+          <span className="w-2 h-2 rounded-full bg-[#4C6B52]" />
+          <span>
+            Intake recorder: <strong className="text-[#1F2A24] font-semibold">{collectorName}</strong> ·{' '}
+            <span className="text-[#4C6B52] font-medium">{collectorSection}</span>
+          </span>
         </div>
-
-        {/* 1. Header with Title & Non-Editable Usher Collector Context */}
-        <header className="mb-6">
-          <h1 className="font-fraunces text-[26px] font-bold text-[#1F2A24] leading-tight tracking-tight">
-            New Person Intake
-          </h1>
-          <p className="text-[14px] text-[#1F2A24]/70 mt-1 leading-normal">
-            Register visitors and new attendees during or after service. Submissions are queued for
-            head usher review and approval.
-          </p>
-
-          {/* Collector Context Pill (Auto-filled, Not Editable) */}
-          <div className="mt-3.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-[10px] bg-[#FDFBF7] border border-[#6B4226]/20 text-[12px] text-[#1F2A24]/75 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-[#4C6B52]" />
-            <span>
-              Collected by <strong className="text-[#1F2A24] font-semibold">{collectorName}</strong> ·{' '}
-              <span className="text-[#4C6B52] font-medium">{collectorSection}</span>
-            </span>
-          </div>
-        </header>
 
         {/* Success Alert */}
         {successMessage && (
@@ -523,10 +495,6 @@ export default function NewPersonIntakePage() {
           </div>
         </form>
       </div>
-
-      <footer className="w-full max-w-[540px] mx-auto px-5 py-4 text-center text-[12px] text-[#1F2A24]/50 border-t border-[#6B4226]/10">
-        Grace Assembly Church Management · Intake Submissions Queue
-      </footer>
-    </div>
+    </AppShell>
   )
 }

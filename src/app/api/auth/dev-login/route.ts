@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}))
     const email = (body?.email || 'dicksondave2002@gmail.com').trim().toLowerCase()
-    const targetRole = body?.role || 'admin'
+    const targetRole = body?.role !== undefined ? body.role : 'super_admin'
     const targetSection = body?.section || 'Adults & Youth'
 
     // 1. Generate magic link for user
@@ -54,11 +54,15 @@ export async function POST(request: Request) {
 
     // 3. Ensure role and section in staff_roles
     try {
-      await supabaseAdmin.from('staff_roles').upsert({
-        user_id: userId,
-        role: targetRole,
-        assigned_section: targetSection,
-      })
+      if (targetRole !== null) {
+        await supabaseAdmin.from('staff_roles').upsert({
+          user_id: userId,
+          role: targetRole,
+          assigned_section: targetSection,
+        })
+      } else {
+        await supabaseAdmin.from('staff_roles').update({ role: null }).eq('user_id', userId)
+      }
     } catch (_) {}
 
     // Store local dev role mapping for resilient development & testing

@@ -10,7 +10,7 @@ This guide details the exact manual steps required before and after deploying Gr
 
 ## 1. Apply Supabase Database Migrations
 
-You must run migrations `008` and `009` in your **Supabase Dashboard → SQL Editor** against your production database.
+You must run migrations `008`, `009`, `010`, and `011` in your **Supabase Dashboard → SQL Editor** against your production database.
 
 ### Files to Run:
 
@@ -24,9 +24,24 @@ You must run migrations `008` and `009` in your **Supabase Dashboard → SQL Edi
 2. **Migration 009 (Pending Staff Requests & Onboarding):**
    * **Local file:** [`supabase/migrations/009_pending_staff_requests.sql`](file:///c:/Users/WHITESYSTEM/Desktop/Personal/Church_App/grace-assembly/supabase/migrations/009_pending_staff_requests.sql)
    * **What it does:**
-     * Creates the `pending_staff_requests` table with public submission RLS and Pastor/Secretary review policies.
+     * Creates the `pending_staff_requests` table with public submission RLS.
 
-*(Note: Migration `007` has already been applied, but `007`, `008`, and `009` are idempotent and safe to re-run).*
+3. **Migration 010 (Two-Tier Roles & Positions Schema Migration):**
+   * **Local file:** [`supabase/migrations/010_two_tier_roles_and_positions.sql`](file:///c:/Users/WHITESYSTEM/Desktop/Personal/Church_App/grace-assembly/supabase/migrations/010_two_tier_roles_and_positions.sql)
+   * **What it does:**
+     * Adds `positions text[] DEFAULT '{}'::text[]` to `people` table with GIN index.
+     * Backfills pastor/secretary staff into `people.positions` before remapping.
+     * Replaces old role check constraint with: `super_admin`, `attendance_admin`, `attendance_staff`, `finance_admin`, `finance_staff`, `events_admin`, `events_staff` (or `NULL`).
+     * Remaps existing rows: `admin` → `super_admin`, `head_usher` → `attendance_admin`, `usher` → `attendance_staff`, `pastor`/`secretary` → `NULL`.
+     * Restricts `pending_staff_requests` management exclusively to `super_admin`.
+     * Upgrades `search_people_for_service` RPC to support searching by position tag.
+
+4. **Migration 011 (Service Session Lifecycle Status):**
+   * **Local file:** [`supabase/migrations/011_service_session_status.sql`](file:///c:/Users/WHITESYSTEM/Desktop/Personal/Church_App/grace-assembly/supabase/migrations/011_service_session_status.sql)
+   * **What it does:**
+     * Adds `status text NOT NULL DEFAULT 'closed' CHECK (status IN ('active', 'closed'))` to `services` table.
+     * Adds index `idx_services_status` for high-performance lookup of active service sessions.
+     * Marks latest Sunday service as `'active'` while ensuring all previous services are marked `'closed'`.
 
 ---
 
@@ -72,7 +87,8 @@ Once Vercel finishes deploying:
 
 - [ ] **Sign-In Page:** Visit `https://your-production-app.vercel.app/` — verify the "Development Quick Access" toolbar at the bottom is **gone**.
 - [ ] **Request Staff Access:** Click "Request staff access →", submit a volunteer request, and verify the confirmation screen renders.
-- [ ] **Staff Approvals:** Sign in as Pastor or Secretary and verify `/staff-approvals` shows pending requests and allows approving volunteers into sections.
-- [ ] **Intake Approvals:** Sign in as Head Usher and verify `/approvals` lists visitor intakes with duplicate phone flags.
-- [ ] **Section Attendance:** Sign in as an Usher and verify `/attendance` marks attendance for their assigned section, with offline persistence and sync indicator.
-- [ ] **Executive Dashboard:** Sign in as Admin, Pastor, or Secretary and verify `/dashboard` displays live turnout and historical trend curves.
+- [ ] **Staff Approvals:** Sign in as `super_admin` ONLY and verify `/staff-approvals` shows pending requests. Verify domain admins get 403 Forbidden.
+- [ ] **Intake Approvals:** Sign in as `attendance_admin` or `super_admin` and verify `/approvals` lists visitor intakes with duplicate phone flags.
+- [ ] **Section Attendance:** Sign in as `attendance_staff` and verify `/attendance` marks attendance for their assigned section.
+- [ ] **Executive Dashboard:** Sign in as `super_admin` or `attendance_admin` and verify `/dashboard` displays live turnout and historical trend curves.
+- [ ] **Former Pastor/Secretary Accounts:** Verify accounts with `role = NULL` receive 403 Forbidden across all protected management routes until explicitly assigned a new system role.

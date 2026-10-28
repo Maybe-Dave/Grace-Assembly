@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import fs from 'fs'
 import path from 'path'
 
-const ALLOWED_STAFF_ROLES = ['usher', 'head_usher'] as const
+const ALLOWED_STAFF_ROLES = ['attendance_staff', 'attendance_admin', 'usher', 'head_usher'] as const
 const ALLOWED_SECTIONS = ['Adults & Youth', 'Infants', 'Older Children', 'Teenagers'] as const
 
 const FALLBACK_DIR = path.join(process.cwd(), '.temp_data')
@@ -68,14 +68,13 @@ export async function POST(request: Request) {
       callerRole = devRoleHeader
     }
 
-    // STRICT PERMISSION CHECK: Only 'pastor' and 'secretary' are permitted.
-    // admin, head_usher, usher, and unauthenticated callers MUST get 403.
-    const ALLOWED_STAFF_APPROVAL_ROLES = ['pastor', 'secretary']
+    // STRICT PERMISSION CHECK: Only 'super_admin' is permitted.
+    const ALLOWED_STAFF_APPROVAL_ROLES = ['super_admin']
     if (!callerRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(callerRole)) {
       return NextResponse.json(
         {
           error:
-            'Forbidden: Only Pastor or Secretary can approve or reject staff account requests. Admin, Head Usher, and Usher roles are forbidden.',
+            'Forbidden: Only Super Admin can approve or reject staff account requests.',
           callerRole: callerRole || 'unauthenticated',
         },
         { status: 403 }
@@ -165,13 +164,15 @@ export async function POST(request: Request) {
     }
 
     // 5. Handle APPROVE
-    // SERVER-SIDE ROLE CONSTRAINT: MUST reject any attempt to set role to admin, pastor, or secretary
-    const finalRole = (approvedRole || staffReq.requested_role || 'usher').trim().toLowerCase()
-    if (!ALLOWED_STAFF_ROLES.includes(finalRole as any)) {
+    // SERVER-SIDE ROLE CONSTRAINT: MUST reject any attempt to set role to super_admin or invalid roles
+    let finalRole = (approvedRole || staffReq.requested_role || 'attendance_staff').trim().toLowerCase()
+    if (finalRole === 'usher') finalRole = 'attendance_staff'
+    if (finalRole === 'head_usher') finalRole = 'attendance_admin'
+    if (!['attendance_staff', 'attendance_admin'].includes(finalRole)) {
       return NextResponse.json(
         {
           error:
-            'Security violation: Staff requests can only be approved as Usher or Head Usher. Admin, Pastor, and Secretary roles must be configured directly by system administration.',
+            'Security violation: Staff requests can only be approved as Attendance Staff or Attendance Admin. Super Admin roles must be configured directly by system administration.',
         },
         { status: 400 }
       )
@@ -365,7 +366,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Staff account successfully approved and activated as ${finalRole === 'head_usher' ? 'Head Usher' : 'Usher'} for ${finalSection}.`,
+      message: `Staff account successfully approved and activated as ${finalRole === 'attendance_admin' ? 'Attendance Admin' : 'Attendance Staff'} for ${finalSection}.`,
       requestId,
       status: 'approved',
       approvedRole: finalRole,

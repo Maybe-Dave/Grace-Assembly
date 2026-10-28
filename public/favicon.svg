@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#FDFBF7" stroke="#6B4226" stroke-opacity="0.2" stroke-width="1"/>
+  <!-- Central Grace Cross -->
+  <path d="M16 4.5V27.5" stroke="#A8763E" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M10 10.5H22" stroke="#A8763E" stroke-width="2.6" stroke-linecap="round"/>
+  <!-- Sanctuary Cathedral Arch -->
+  <path d="M6 27C6 17 10.5 7.5 16 5.5C21.5 7.5 26 17 26 27" stroke="#1F2A24" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Welcoming Inner Altar Portal -->
+  <path d="M11 27C11 21.5 13.5 17.5 16 17.5C18.5 17.5 21 21.5 21 27" stroke="#A8763E" stroke-width="2" stroke-linecap="round"/>
+</svg>

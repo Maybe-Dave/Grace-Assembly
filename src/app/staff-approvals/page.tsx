@@ -4,13 +4,15 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import AppShell from '@/components/layout/AppShell'
+import PageHeader from '@/components/layout/PageHeader'
 
 interface PendingStaffRequest {
   id: string
   full_name: string
   email: string
   phone: string
-  requested_role: 'usher' | 'head_usher'
+  requested_role: 'attendance_staff' | 'attendance_admin' | 'usher' | 'head_usher'
   requested_section: string
   status: 'pending' | 'approved' | 'rejected'
   rejection_reason?: string | null
@@ -80,7 +82,7 @@ export default function StaffApprovalsPage() {
 
   // In-flight adjustments per request card
   const [editMap, setEditMap] = useState<
-    Record<string, { role: 'usher' | 'head_usher'; section: string; rejectReason?: string; isRejecting?: boolean }>
+    Record<string, { role: 'attendance_staff' | 'attendance_admin'; section: string; rejectReason?: string; isRejecting?: boolean }>
   >({})
 
   // Fetch pending staff requests
@@ -95,10 +97,13 @@ export default function StaffApprovalsPage() {
         setRequests(list)
 
         // Initialize editMap with current requested defaults
-        const initialEdits: Record<string, { role: 'usher' | 'head_usher'; section: string }> = {}
+        const initialEdits: Record<string, { role: 'attendance_staff' | 'attendance_admin'; section: string }> = {}
         for (const req of list) {
+          const mappedRole = (req.requested_role === 'head_usher' || req.requested_role === 'attendance_admin')
+            ? 'attendance_admin'
+            : 'attendance_staff'
           initialEdits[req.id] = {
-            role: req.requested_role,
+            role: mappedRole,
             section: req.requested_section,
           }
         }
@@ -112,7 +117,7 @@ export default function StaffApprovalsPage() {
     }
   }, [])
 
-  // Initialize session & verify role (Gated strictly to pastor & secretary only)
+  // Initialize session & verify role (Gated strictly to super_admin only)
   useEffect(() => {
     async function init() {
       try {
@@ -157,9 +162,8 @@ export default function StaffApprovalsPage() {
 
         setUserRole(role)
 
-        // Strict role gate: ONLY 'pastor' and 'secretary'
-        // admin, head_usher, usher, etc. are forbidden
-        if (role === 'pastor' || role === 'secretary') {
+        // Strict role gate: ONLY 'super_admin'
+        if (role === 'super_admin') {
           await loadRequests(session.access_token)
         }
       } finally {
@@ -206,7 +210,7 @@ export default function StaffApprovalsPage() {
       setFeedback({
         id: req.id,
         type: 'approved',
-        message: `Approved ${req.full_name} as ${edit.role === 'head_usher' ? 'Head Usher' : 'Usher'} (${edit.section}). Activation email sent.`,
+        message: `Approved ${req.full_name} as ${edit.role === 'attendance_admin' ? 'Attendance Admin' : 'Attendance Staff'} (${edit.section}). Activation email sent.`,
       })
     } catch (err: any) {
       setError(err?.message || 'Error approving request.')
@@ -260,106 +264,73 @@ export default function StaffApprovalsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] flex items-center justify-center p-6">
-        <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading staff approvals…</p>
-      </main>
+      <AppShell userRole={userRole} userName={userName} userEmail={userEmail}>
+        <div className="flex items-center justify-center py-24 text-center">
+          <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">Loading staff approvals…</p>
+        </div>
+      </AppShell>
     )
   }
 
-  // DISTINCT STRICT ROLE GATE: Pastor and Secretary ONLY.
-  // Any other role (including admin, head_usher, usher) gets 403 Forbidden.
-  if (userRole !== 'pastor' && userRole !== 'secretary') {
+  // STRICT ROLE GATE: Super Admin ONLY.
+  // Any other role (including attendance_admin, attendance_staff, finance_*, events_*) gets 403 Forbidden.
+  if (userRole !== 'super_admin') {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col items-center justify-center p-6 text-center">
-        <div
-          id="staff-approvals-403-card"
-          className="w-full max-w-[460px] bg-[#FAF8F5] border border-[#C94F3D]/30 rounded-[16px] p-8 shadow-sm space-y-4"
-        >
-          <div className="w-14 h-14 rounded-full bg-[#C94F3D]/10 text-[#C94F3D] flex items-center justify-center mx-auto text-[26px]">
-            🚫
-          </div>
-          <span className="inline-block text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded bg-[#C94F3D]/15 text-[#C94F3D]">
-            403 Forbidden
-          </span>
-          <h1 className="font-fraunces text-[24px] font-bold text-[#1F2A24]">
-            Pastor & Secretary Gated Access
-          </h1>
-          <p className="text-[14px] text-[#1F2A24]/75 leading-relaxed">
-            Staff account onboarding and role approval is strictly reserved for the{' '}
-            <strong>Pastor</strong> and <strong>Church Secretary</strong>. Other roles (including
-            Admin, Head Usher, and Usher) are not permitted to review or approve staff accounts.
-          </p>
-          <div className="pt-3 flex flex-col sm:flex-row gap-2">
-            <Link
-              href="/attendance"
-              className="flex-1 py-2.5 px-4 rounded-[10px] bg-[#A8763E] text-[#F7F3EC] text-[14px] font-medium font-work-sans hover:bg-[#976835] transition-colors"
-            >
-              Go to Attendance
-            </Link>
-            <Link
-              href="/"
-              className="py-2.5 px-4 rounded-[10px] border border-[#6B4226]/30 text-[#1F2A24] text-[14px] font-medium font-work-sans hover:bg-[#6B4226]/5 transition-colors"
-            >
-              Sign Out
-            </Link>
+      <AppShell userRole={userRole} userName={userName} userEmail={userEmail}>
+        <div className="w-full max-w-[480px] mx-auto py-16 px-4 text-center">
+          <div
+            id="staff-approvals-403-card"
+            className="bg-[#FAF8F5] border border-[#C94F3D]/30 rounded-[16px] p-8 shadow-sm space-y-4"
+          >
+            <div className="w-14 h-14 rounded-full bg-[#C94F3D]/10 text-[#C94F3D] flex items-center justify-center mx-auto text-[26px]">
+              🚫
+            </div>
+            <span className="inline-block text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded bg-[#C94F3D]/15 text-[#C94F3D]">
+              403 Forbidden
+            </span>
+            <h1 className="font-fraunces text-[24px] font-bold text-[#1F2A24]">
+              Super Admin Gated Access
+            </h1>
+            <p className="text-[14px] text-[#1F2A24]/75 leading-relaxed">
+              Staff account onboarding and role assignment is strictly reserved for the{' '}
+              <strong>Super Admin</strong>. Domain admins (including Attendance Admin) and other staff roles are not permitted to review or approve staff accounts.
+            </p>
+            <div className="pt-3 flex flex-col sm:flex-row gap-2">
+              <Link
+                href="/attendance"
+                className="flex-1 py-2.5 px-4 rounded-[10px] bg-[#A8763E] text-[#F7F3EC] text-[14px] font-medium font-work-sans hover:bg-[#976835] transition-colors"
+              >
+                Go to Attendance
+              </Link>
+            </div>
           </div>
         </div>
-      </main>
+      </AppShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col justify-between selection:bg-[#A8763E]/20">
-      <div className="w-full max-w-[760px] mx-auto px-5 py-6 flex-1 flex flex-col">
-        {/* Navigation Bar */}
-        <div className="flex items-center justify-between pb-4 mb-6 border-b border-[#6B4226]/15">
-          <div className="flex items-center gap-3">
-            <span className="font-fraunces text-[19px] font-bold text-[#1F2A24]">
-              Grace Assembly
-            </span>
-            <span className="text-[12px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-[#4C6B52]/15 text-[#4C6B52] border border-[#4C6B52]/30">
-              {userRole === 'pastor' ? 'Pastor' : 'Church Secretary'}
-            </span>
-          </div>
+    <AppShell userRole={userRole} userName={userName} userEmail={userEmail}>
+      <div className="w-full max-w-5xl mx-auto py-2 flex-1 flex flex-col space-y-6">
+        {/* Minimal Clean Header: Title + Subtitle only */}
+        <PageHeader
+          title="Staff Approvals"
+          subtitle="Review and authorize staff onboarding and role permissions."
+        />
 
-          <div className="flex items-center gap-4 text-[13px]">
-            <Link
-              href="/dashboard"
-              className="text-[#6B4226] hover:text-[#1F2A24] font-medium transition-colors"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/attendance"
-              className="text-[#4C6B52] hover:underline font-medium transition-colors"
-            >
-              Attendance &rarr;
-            </Link>
-          </div>
+        <div className="flex items-center justify-between text-[12px] bg-[#FDFBF7] p-3 rounded-[10px] border border-[#6B4226]/15 text-[#1F2A24]/75">
+          <span>
+            Pending Requests:{' '}
+            <strong className="text-[#A8763E] font-bold text-[13px]">{requests.length}</strong>
+          </span>
+          <span className="text-[#1F2A24]/50">
+            Approved staff immediately receive assigned role access upon email sign-in.
+          </span>
         </div>
-
-        {/* Page Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[12px] uppercase font-bold tracking-wider text-[#A8763E] mb-1">
-                Leadership Access Gate
-              </p>
-              <h1 className="font-fraunces text-[28px] font-bold text-[#1F2A24] tracking-tight">
-                Staff Account Approvals
-              </h1>
-            </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-[#A8763E]/15 text-[#A8763E] border border-[#A8763E]/30">
-                {requests.length} pending {requests.length === 1 ? 'request' : 'requests'}
-              </span>
-            </div>
-          </div>
-          <p className="text-[14px] text-[#1F2A24]/65 mt-1 leading-normal">
-            Review onboarding requests from volunteers desiring to serve as Usher or Head Usher.
-            You may adjust the requested role or assigned section before approving.
-          </p>
-        </div>
+        <p className="text-[13.5px] text-[#1F2A24]/65 leading-normal">
+          Review onboarding requests from volunteers desiring to serve on church staff.
+          You may adjust the requested role or assigned section before approving.
+        </p>
 
         {/* Global Feedback Banner */}
         {feedback && (
@@ -409,12 +380,16 @@ export default function StaffApprovalsPage() {
           <div className="space-y-4">
             {requests.map((req) => {
               const edit = editMap[req.id] || {
-                role: req.requested_role,
+                role: (req.requested_role === 'head_usher' || req.requested_role === 'attendance_admin') ? 'attendance_admin' : 'attendance_staff',
                 section: req.requested_section,
                 rejectReason: '',
                 isRejecting: false,
               }
               const isBusy = processingId === req.id
+
+              const requestedRoleLabel = (req.requested_role === 'head_usher' || req.requested_role === 'attendance_admin')
+                ? 'Attendance Admin'
+                : 'Attendance Staff'
 
               return (
                 <div
@@ -430,7 +405,7 @@ export default function StaffApprovalsPage() {
                           {req.full_name}
                         </h2>
                         <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#A8763E]/12 text-[#A8763E] border border-[#A8763E]/25">
-                          Requested: {req.requested_role === 'head_usher' ? 'Head Usher' : 'Usher'}
+                          Requested: {requestedRoleLabel}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[13px] text-[#1F2A24]/70">
@@ -458,15 +433,15 @@ export default function StaffApprovalsPage() {
                             ...prev,
                             [req.id]: {
                               ...prev[req.id],
-                              role: e.target.value as 'usher' | 'head_usher',
+                              role: e.target.value as 'attendance_staff' | 'attendance_admin',
                             },
                           }))
                         }
                         disabled={isBusy}
                         className="w-full bg-[#FAF8F5] border border-[#6B4226]/30 text-[#1F2A24] text-[13px] py-1.5 px-2.5 rounded-[6px] outline-none focus:border-[#A8763E]"
                       >
-                        <option value="usher">Usher (Section attendance marking)</option>
-                        <option value="head_usher">Head Usher (Intake & member approval)</option>
+                        <option value="attendance_staff">Attendance Staff (Section attendance marking)</option>
+                        <option value="attendance_admin">Attendance Admin (Intake & member approval)</option>
                       </select>
                     </div>
 
@@ -571,7 +546,7 @@ export default function StaffApprovalsPage() {
                         disabled={isBusy}
                         className="bg-[#4C6B52] hover:bg-[#3f5a44] text-[#F7F3EC] rounded-[8px] py-2 px-5 text-[14px] font-semibold transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
                       >
-                        {isBusy ? 'Activating…' : `Approve & Activate (${edit.role === 'head_usher' ? 'Head Usher' : 'Usher'})`}
+                        {isBusy ? 'Activating…' : `Approve & Activate (${edit.role === 'attendance_admin' ? 'Attendance Admin' : 'Attendance Staff'})`}
                       </button>
                     </div>
                   )}
@@ -581,12 +556,6 @@ export default function StaffApprovalsPage() {
           </div>
         )}
       </div>
-
-      <footer className="w-full max-w-[760px] mx-auto pt-8 pb-3 text-center">
-        <p className="text-[#1F2A24]/45 text-[12px] font-work-sans">
-          Grace Assembly Staff Onboarding &copy; 2026 &middot; Gated to Pastor and Church Secretary
-        </p>
-      </footer>
-    </div>
+    </AppShell>
   )
 }

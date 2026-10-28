@@ -3,46 +3,13 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-
-// Simple drawn architectural roofline mark
-function RooflineMark() {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="text-[#1F2A24]"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.5 14.5L12 5.5L21.5 14.5"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6 11V18.5H18V11"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="2 3"
-        opacity="0.5"
-      />
-    </svg>
-  )
-}
-
-const OTP_LENGTH = 8
+import GraceAssemblyMark from '@/components/layout/GraceAssemblyMark'
 
 export default function WelcomeSignInPage() {
   const router = useRouter()
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''))
+  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', ''])
   const [greeting, setGreeting] = useState('Good morning')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,11 +50,11 @@ export default function WelcomeSignInPage() {
     return () => clearInterval(timer)
   }, [resendCooldown])
 
-  // If already authenticated, advance to /attendance
+  // If already authenticated, advance to /home
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        router.replace('/attendance')
+        router.replace('/home')
       }
     })
   }, [router])
@@ -108,19 +75,19 @@ export default function WelcomeSignInPage() {
       nextOtp[index] = digits[0]
       setOtp(nextOtp)
       if (error) setError(null)
-      if (index < OTP_LENGTH - 1) {
+      if (index < 5) {
         inputRefs.current[index + 1]?.focus()
       }
     } else {
       // Pasted or autofilled multiple digits
       digits.forEach((d, i) => {
-        if (index + i < OTP_LENGTH) {
+        if (index + i < 6) {
           nextOtp[index + i] = d
         }
       })
       setOtp(nextOtp)
       if (error) setError(null)
-      const nextIdx = Math.min(index + digits.length, OTP_LENGTH - 1)
+      const nextIdx = Math.min(index + digits.length, 5)
       inputRefs.current[nextIdx]?.focus()
     }
   }
@@ -137,7 +104,7 @@ export default function WelcomeSignInPage() {
     } else if (e.key === 'ArrowLeft' && index > 0) {
       e.preventDefault()
       inputRefs.current[index - 1]?.focus()
-    } else if (e.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
+    } else if (e.key === 'ArrowRight' && index < 5) {
       e.preventDefault()
       inputRefs.current[index + 1]?.focus()
     }
@@ -145,18 +112,18 @@ export default function WelcomeSignInPage() {
 
   function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault()
-    const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, OTP_LENGTH)
+    const pasted = e.clipboardData.getData('text/plain').replace(/\D/g, '').slice(0, 6)
     if (!pasted) return
 
     const digits = pasted.split('')
-    const nextOtp = Array(OTP_LENGTH).fill('')
+    const nextOtp = ['', '', '', '', '', '']
     digits.forEach((d, i) => {
-      if (i < OTP_LENGTH) nextOtp[i] = d
+      if (i < 6) nextOtp[i] = d
     })
     setOtp(nextOtp)
     if (error) setError(null)
 
-    const nextIdx = Math.min(digits.length, OTP_LENGTH - 1)
+    const nextIdx = Math.min(digits.length, 5)
     inputRefs.current[nextIdx]?.focus()
   }
 
@@ -193,7 +160,7 @@ export default function WelcomeSignInPage() {
       if (!checkRes.ok || !checkData?.isStaff) {
         setError(
           checkData?.error ||
-            "This email isn't registered as staff. Contact the church office."
+          "This email isn't registered as staff. Contact the church office."
         )
         setLoading(false)
         return
@@ -249,8 +216,8 @@ export default function WelcomeSignInPage() {
     setResendMessage(null)
 
     const trimmedCode = code.trim()
-    if (!trimmedCode || trimmedCode.length < OTP_LENGTH) {
-      setError(`Please enter the ${OTP_LENGTH}-digit verification code.`)
+    if (!trimmedCode || trimmedCode.length < 6) {
+      setError('Please enter the 6-digit verification code.')
       return
     }
 
@@ -297,8 +264,8 @@ export default function WelcomeSignInPage() {
         }).catch(() => null)
       }
 
-      // Successful verification -> navigate to /attendance
-      router.push('/attendance')
+      // Successful verification -> navigate to /home
+      router.push('/home')
     } catch (err) {
       console.error('Verify error:', err)
       setError('Unable to connect. Please check your internet connection and try again.')
@@ -334,7 +301,7 @@ export default function WelcomeSignInPage() {
           setError('Unable to resend code right now. Please wait a moment.')
         }
       } else {
-        setResendMessage(`A new ${OTP_LENGTH}-digit code has been sent to your email.`)
+        setResendMessage('A new 6-digit code has been sent to your email.')
         setResendCooldown(30)
       }
     } catch {
@@ -347,7 +314,7 @@ export default function WelcomeSignInPage() {
   // 1-Click Development Sign-In (only compiled/callable when NEXT_PUBLIC_ENABLE_DEV_LOGIN=true)
   const DEV_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === 'true'
 
-  async function handleDevSignIn(role: 'admin' | 'head_usher' | 'usher' | 'pastor' | 'secretary') {
+  async function handleDevSignIn(role: string | null) {
     if (!DEV_LOGIN_ENABLED) return
     setLoading(true)
     setError(null)
@@ -367,11 +334,7 @@ export default function WelcomeSignInPage() {
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         })
-        if (role === 'pastor' || role === 'secretary') {
-          router.push('/staff-approvals')
-        } else {
-          router.push('/attendance')
-        }
+        router.push('/home')
       } else {
         setError(data?.error || 'Dev login failed')
         setLoading(false)
@@ -386,9 +349,9 @@ export default function WelcomeSignInPage() {
     <main className="min-h-screen w-full bg-[#F7F3EC] flex flex-col justify-between py-10 px-6 sm:px-8 selection:bg-[#A8763E]/20">
       {/* Centered container with max-width for tablet/desktop */}
       <div className="w-full max-w-[420px] mx-auto my-auto flex flex-col">
-        {/* 1. Drawn roofline mark + "Grace Assembly" wordmark in Fraunces bold, 18px */}
+        {/* 1. Grace Assembly brand mark + "Grace Assembly" wordmark in Fraunces bold, 18px */}
         <div className="flex items-center space-x-2.5 mb-10">
-          <RooflineMark />
+          <GraceAssemblyMark size={24} />
           <span className="font-fraunces text-[18px] font-bold text-[#1F2A24] tracking-tight">
             Grace Assembly
           </span>
@@ -408,7 +371,7 @@ export default function WelcomeSignInPage() {
         <p className="text-[15px] text-[#1F2A24]/65 font-work-sans mb-8 leading-normal">
           {step === 'email'
             ? 'Sign in with your registered church email to receive your sign-in code.'
-            : `We sent an 8-digit verification code to ${email}.`}
+            : `We sent a 6-digit verification code to ${email}.`}
         </p>
 
         {/* Error / Alert banner in #C94F3D (reserved for alerts/errors only) */}
@@ -505,21 +468,21 @@ export default function WelcomeSignInPage() {
             noValidate
             className="space-y-6"
           >
-            {/* 7. Second step: Classic 8-digit OTP boxes + Verify button + Resend code */}
+            {/* 7. Second step: Classic 6-digit OTP boxes + Verify button + Resend code */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-[13px] font-medium text-[#1F2A24]/75 font-work-sans">
                   Verification code
                 </label>
                 <span className="text-[12px] text-[#1F2A24]/50 font-mono">
-                  {otp.filter(Boolean).length}/{OTP_LENGTH}
+                  {otp.filter(Boolean).length}/6
                 </span>
               </div>
 
               <div
-                className="flex items-center justify-between gap-1 sm:gap-2"
+                className="flex items-center justify-between gap-2 sm:gap-3"
                 role="group"
-                aria-label="8-digit verification code"
+                aria-label="6-digit verification code"
               >
                 {otp.map((digit, index) => (
                   <input
@@ -540,13 +503,12 @@ export default function WelcomeSignInPage() {
                     onFocus={(e) => e.target.select()}
                     disabled={loading}
                     aria-label={`Digit ${index + 1}`}
-                    className={`flex-1 min-w-[32px] max-w-[46px] h-12 sm:h-14 text-center text-[18px] sm:text-[22px] font-mono font-semibold text-[#1F2A24] bg-[#F7F3EC] rounded-[8px] sm:rounded-[10px] border-2 outline-none transition-all duration-150 ${
-                      error
+                    className={`w-11 sm:w-13 h-14 sm:h-15 text-center text-[22px] sm:text-[24px] font-mono font-semibold text-[#1F2A24] bg-[#F7F3EC] rounded-[10px] border-2 outline-none transition-all duration-150 ${error
                         ? 'border-[#C94F3D] text-[#C94F3D] focus:border-[#C94F3D] focus:ring-2 focus:ring-[#C94F3D]/20'
                         : digit
-                        ? 'border-[#6B4226] bg-[#6B4226]/5 focus:border-[#A8763E] focus:ring-3 focus:ring-[#A8763E]/20'
-                        : 'border-[#6B4226]/30 hover:border-[#6B4226]/60 focus:border-[#A8763E] focus:ring-3 focus:ring-[#A8763E]/20'
-                    } disabled:opacity-60 shadow-xs`}
+                          ? 'border-[#6B4226] bg-[#6B4226]/5 focus:border-[#A8763E] focus:ring-3 focus:ring-[#A8763E]/20'
+                          : 'border-[#6B4226]/30 hover:border-[#6B4226]/60 focus:border-[#A8763E] focus:ring-3 focus:ring-[#A8763E]/20'
+                      } disabled:opacity-60 shadow-xs`}
                   />
                 ))}
               </div>
@@ -559,7 +521,7 @@ export default function WelcomeSignInPage() {
                 e.preventDefault()
                 handleVerifyCode(e)
               }}
-              disabled={loading || code.trim().length < OTP_LENGTH}
+              disabled={loading || code.trim().length < 6}
               className="w-full bg-[#A8763E] text-[#F7F3EC] rounded-[10px] p-[16px] text-[16px] font-medium font-work-sans hover:bg-[#976835] active:bg-[#855b2e] disabled:opacity-60 transition-colors cursor-pointer shadow-xs"
             >
               {loading ? 'Verifying…' : 'Verify'}
@@ -582,7 +544,7 @@ export default function WelcomeSignInPage() {
                 type="button"
                 onClick={() => {
                   setStep('email')
-                  setOtp(Array(OTP_LENGTH).fill(''))
+                  setOtp(['', '', '', '', '', ''])
                   setError(null)
                   setResendMessage(null)
                 }}
@@ -602,51 +564,51 @@ export default function WelcomeSignInPage() {
             </p>
             <div className="grid grid-cols-3 gap-2 mb-2">
               <button
-                id="dev-login-admin-button"
+                id="dev-login-super-admin-button"
                 type="button"
-                onClick={() => handleDevSignIn('admin')}
+                onClick={() => handleDevSignIn('super_admin')}
                 disabled={loading}
                 className="py-2 px-2 rounded-[8px] bg-[#A8763E]/12 hover:bg-[#A8763E]/20 text-[#A8763E] border border-[#A8763E]/30 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
               >
-                Admin
+                Super Admin
               </button>
               <button
-                id="dev-login-head-usher-button"
+                id="dev-login-attendance-admin-button"
                 type="button"
-                onClick={() => handleDevSignIn('head_usher')}
+                onClick={() => handleDevSignIn('attendance_admin')}
                 disabled={loading}
                 className="py-2 px-2 rounded-[8px] bg-[#6B4226]/12 hover:bg-[#6B4226]/20 text-[#6B4226] border border-[#6B4226]/30 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
               >
-                Head Usher
+                Attendance Admin
               </button>
               <button
-                id="dev-login-usher-button"
+                id="dev-login-attendance-staff-button"
                 type="button"
-                onClick={() => handleDevSignIn('usher')}
+                onClick={() => handleDevSignIn('attendance_staff')}
                 disabled={loading}
                 className="py-2 px-2 rounded-[8px] bg-[#4C6B52]/12 hover:bg-[#4C6B52]/20 text-[#4C6B52] border border-[#4C6B52]/30 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
               >
-                Usher
+                Attendance Staff
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
-                id="dev-login-pastor-button"
+                id="dev-login-unassigned-button"
                 type="button"
-                onClick={() => handleDevSignIn('pastor')}
+                onClick={() => handleDevSignIn(null)}
+                disabled={loading}
+                className="py-1.5 px-2 rounded-[8px] bg-[#C94F3D]/10 hover:bg-[#C94F3D]/20 text-[#C94F3D] border border-[#C94F3D]/30 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
+              >
+                No Role (role = NULL)
+              </button>
+              <button
+                id="dev-login-finance-admin-button"
+                type="button"
+                onClick={() => handleDevSignIn('finance_admin')}
                 disabled={loading}
                 className="py-1.5 px-2 rounded-[8px] bg-[#4C6B52]/20 hover:bg-[#4C6B52]/30 text-[#1F2A24] border border-[#4C6B52]/40 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
               >
-                Pastor (Staff Approver)
-              </button>
-              <button
-                id="dev-login-secretary-button"
-                type="button"
-                onClick={() => handleDevSignIn('secretary')}
-                disabled={loading}
-                className="py-1.5 px-2 rounded-[8px] bg-[#A8763E]/20 hover:bg-[#A8763E]/30 text-[#1F2A24] border border-[#A8763E]/40 text-[12px] font-semibold transition-colors cursor-pointer shadow-2xs"
-              >
-                Secretary (Staff Approver)
+                Finance Admin
               </button>
             </div>
           </div>

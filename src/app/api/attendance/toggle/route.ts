@@ -24,8 +24,8 @@ export async function POST(request: Request) {
 
     const verifiedUser = authData.user
 
-    // 2. Authorize caller: verify active staff role (admin, usher, head_usher, pastor, secretary)
-    let callerRole = 'usher'
+    // 2. Authorize caller: verify active staff role (super_admin, attendance_admin, attendance_staff)
+    let callerRole = ''
     let callerAssignedSection = ''
     const { data: roleRecord } = await supabaseAdmin
       .from('staff_roles')
@@ -50,15 +50,15 @@ export async function POST(request: Request) {
         const devEntry =
           devMap[verifiedUser.id] ||
           (verifiedUser.email && devMap[verifiedUser.email.toLowerCase()])
-        if (devEntry?.role) callerRole = devEntry.role
+        if (devEntry && devEntry.role !== undefined) callerRole = devEntry.role
         if (devEntry?.section) callerAssignedSection = devEntry.section
       }
     } catch (_) {}
 
-    const ALLOWED_ROLES = ['admin', 'usher', 'head_usher', 'pastor', 'secretary']
-    if (!ALLOWED_ROLES.includes(callerRole)) {
+    const ALLOWED_ROLES = ['super_admin', 'attendance_admin', 'attendance_staff']
+    if (!callerRole || !ALLOWED_ROLES.includes(callerRole)) {
       return NextResponse.json(
-        { error: 'Forbidden: staff role required' },
+        { error: 'Forbidden: attendance staff or admin role required' },
         { status: 403 }
       )
     }
@@ -77,12 +77,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // 4. SECTION ENFORCEMENT: ushers can only mark people in their own assigned_section.
-    //    Admin, head_usher, pastor, and secretary are exempt.
-    if (callerRole === 'usher') {
+    // 4. SECTION ENFORCEMENT: attendance_staff can only mark people in their own assigned_section.
+    //    super_admin and attendance_admin are cross-section exempt.
+    if (callerRole === 'attendance_staff') {
       if (!callerAssignedSection) {
         return NextResponse.json(
-          { error: 'Forbidden: usher has no assigned section configured. Contact an admin.' },
+          { error: 'Forbidden: staff member has no assigned section configured. Contact an admin.' },
           { status: 403 }
         )
       }

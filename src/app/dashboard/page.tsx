@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import AppShell from '@/components/layout/AppShell'
+import PageHeader from '@/components/layout/PageHeader'
 
 interface UsherInfo {
   id: string
@@ -112,11 +114,77 @@ export default function AdminAttendanceDashboard() {
     async (token: string, silent = false) => {
       if (!silent) setIsRefreshing(true)
       try {
+        let activeToken = token
+        try {
+          const sessRes = await supabase.auth.getSession()
+          if (sessRes.data?.session?.access_token) {
+            activeToken = sessRes.data.session.access_token
+          }
+        } catch (_) {}
+
         const res = await fetch('/api/dashboard/stats', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${activeToken}` },
         })
 
+        // 401 Unauthorized: token expired or invalid
+        if (res.status === 401) {
+          // Attempt token refresh
+          try {
+            const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession()
+            if (!refreshErr && refreshData?.session?.access_token) {
+              const freshToken = refreshData.session.access_token
+              setAuthToken(freshToken)
+              const retryRes = await fetch('/api/dashboard/stats', {
+                headers: { Authorization: `Bearer ${freshToken}` },
+              })
+              if (retryRes.ok) {
+                const data = await retryRes.json()
+                if (data.activeService) setActiveService(data.activeService)
+                if (data.historicalServices) setHistoricalServices(data.historicalServices)
+                if (data.userRole) setUserRole(data.userRole)
+                setLastRefreshed(new Date())
+                setError(null)
+                return
+              }
+            }
+          } catch (_) {}
+
+          // Dev bypass auto-recovery in local dev environment
+          if (process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === 'true') {
+            try {
+              const devRes = await fetch('/api/auth/dev-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: 'super_admin' }),
+              })
+              if (devRes.ok) {
+                const devData = await devRes.json()
+                if (devData.session) {
+                  await supabase.auth.setSession({
+                    access_token: devData.session.access_token,
+                    refresh_token: devData.session.refresh_token,
+                  })
+                  setAuthToken(devData.session.access_token)
+                  return
+                }
+              }
+            } catch (_) {}
+          }
+
+          // Stop polling on unresolvable 401 to prevent log spam
+          if (pollingTimerRef.current) {
+            clearInterval(pollingTimerRef.current)
+            pollingTimerRef.current = null
+          }
+          router.replace('/')
+          return
+        }
+
         if (res.status === 403) {
+          if (pollingTimerRef.current) {
+            clearInterval(pollingTimerRef.current)
+            pollingTimerRef.current = null
+          }
           setUserRole('unauthorized')
           return
         }
@@ -146,7 +214,7 @@ export default function AdminAttendanceDashboard() {
         if (!silent) setIsRefreshing(false)
       }
     },
-    []
+    [router]
   )
 
   // Session initialization
@@ -169,7 +237,7 @@ export default function AdminAttendanceDashboard() {
             const devRes = await fetch('/api/auth/dev-login', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: 'admin' }),
+              body: JSON.stringify({ role: 'super_admin' }),
             })
             if (devRes.ok) {
               const devData = await devRes.json()
@@ -193,7 +261,7 @@ export default function AdminAttendanceDashboard() {
         setUserEmail(session.user?.email || 'admin')
 
         // Fetch user role
-        let role = 'admin'
+        let role = 'super_admin'
         try {
           const profileRes = await fetch('/api/auth/me', {
             method: 'POST',
@@ -214,7 +282,7 @@ export default function AdminAttendanceDashboard() {
 
         setUserRole(role)
 
-        if (['admin', 'pastor', 'secretary'].includes(role)) {
+        if (['super_admin', 'attendance_admin'].includes(role)) {
           await fetchStats(session.access_token, false)
         }
       } finally {
@@ -226,7 +294,7 @@ export default function AdminAttendanceDashboard() {
 
   // Auto-refresh polling every 7 seconds while live view is active
   useEffect(() => {
-    if (!authToken || !['admin', 'pastor', 'secretary'].includes(userRole)) return
+    if (!authToken || !['super_admin', 'attendance_admin'].includes(userRole)) return
 
     if (activeTab === 'live') {
       pollingTimerRef.current = setInterval(() => {
@@ -252,92 +320,56 @@ export default function AdminAttendanceDashboard() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] flex items-center justify-center p-6">
-        <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">
-          Loading Admin Attendance Dashboard…
-        </p>
-      </main>
+      <AppShell userRole={userRole} userEmail={userEmail}>
+        <div className="flex items-center justify-center py-24 text-center">
+          <p className="text-[15px] text-[#1F2A24]/65 font-work-sans">
+            Loading Attendance Dashboard…
+          </p>
+        </div>
+      </AppShell>
     )
   }
 
-  // 403 Forbidden Access Gate: Only admin, pastor, or secretary can view
-  if (!['admin', 'pastor', 'secretary'].includes(userRole)) {
+  // 403 Forbidden Access Gate: Only super_admin or attendance_admin can view
+  if (!['super_admin', 'attendance_admin'].includes(userRole)) {
     return (
-      <main className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-full max-w-[460px] bg-[#FDFBF7] border border-[#6B4226]/20 rounded-[16px] p-8 shadow-sm space-y-4">
-          <div className="w-14 h-14 rounded-full bg-[#C94F3D]/12 text-[#C94F3D] flex items-center justify-center mx-auto text-[24px] font-bold">
-            🔒
-          </div>
-          <h2 className="font-fraunces text-[22px] font-bold text-[#1F2A24]">
-            Restricted Executive Dashboard
-          </h2>
-          <p className="text-[14px] text-[#1F2A24]/75 leading-relaxed">
-            Access to church-wide combined attendance is reserved exclusively for{' '}
-            <strong>Admin</strong>, <strong>Pastor</strong>, and <strong>Secretary</strong> roles.
-            Your account is assigned the <strong>{userRole || 'usher'}</strong> role.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/attendance"
-              id="return-attendance-button"
-              className="inline-flex items-center justify-center px-5 py-2.5 rounded-[10px] bg-[#A8763E] text-[#FDFBF7] text-[14px] font-semibold hover:bg-[#976835] transition-colors shadow-2xs"
-            >
-              Return to Section Attendance
-            </Link>
+      <AppShell userRole={userRole} userEmail={userEmail}>
+        <div className="w-full max-w-[480px] mx-auto py-16 px-4 text-center">
+          <div className="bg-[#FDFBF7] border border-[#6B4226]/20 rounded-[16px] p-8 shadow-sm space-y-4">
+            <div className="w-14 h-14 rounded-full bg-[#C94F3D]/12 text-[#C94F3D] flex items-center justify-center mx-auto text-[24px] font-bold">
+              🔒
+            </div>
+            <h2 className="font-fraunces text-[22px] font-bold text-[#1F2A24]">
+              Restricted Attendance Dashboard
+            </h2>
+            <p className="text-[14px] text-[#1F2A24]/75 leading-relaxed">
+              Access to church-wide combined attendance is reserved exclusively for{' '}
+              <strong>Super Admin</strong> and <strong>Attendance Admin</strong> roles.
+              Your account is assigned the <strong>{userRole || 'staff'}</strong> role.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/attendance"
+                id="return-attendance-button"
+                className="inline-flex items-center justify-center px-5 py-2.5 rounded-[10px] bg-[#A8763E] text-[#FDFBF7] text-[14px] font-semibold hover:bg-[#976835] transition-colors shadow-2xs"
+              >
+                Return to Section Attendance
+              </Link>
+            </div>
           </div>
         </div>
-      </main>
+      </AppShell>
     )
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col justify-between selection:bg-[#A8763E]/20">
-      <div className="w-full max-w-[840px] mx-auto flex-1 flex flex-col p-4 sm:p-6 space-y-6">
-        {/* Top Header */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#6B4226]/15">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="font-fraunces text-[24px] sm:text-[28px] font-bold text-[#1F2A24] tracking-tight">
-                Attendance Dashboard
-              </h1>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-[#A8763E]/15 text-[#A8763E] border border-[#A8763E]/30">
-                {userRole}
-              </span>
-            </div>
-            <p className="text-[13px] text-[#1F2A24]/65 font-work-sans mt-0.5">
-              Live executive view across all church rooms and physical sections.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href="/attendance"
-              id="nav-attendance-link"
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#4C6B52] bg-[#4C6B52]/10 px-3 py-1.5 rounded-full border border-[#4C6B52]/25 hover:bg-[#4C6B52]/20 transition-colors shadow-2xs"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span>Take Attendance</span>
-            </Link>
-
-            <Link
-              href="/approvals"
-              id="nav-approvals-link"
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#A8763E] bg-[#A8763E]/10 px-3 py-1.5 rounded-full border border-[#A8763E]/25 hover:bg-[#A8763E]/20 transition-colors shadow-2xs"
-            >
-              <span>Intake Queue</span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="text-[12px] text-[#1F2A24]/65 hover:text-[#1F2A24] font-medium px-2 py-1 cursor-pointer hover:underline"
-            >
-              Sign out
-            </button>
-          </div>
-        </header>
+    <AppShell userRole={userRole} userEmail={userEmail}>
+      <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col space-y-6">
+        {/* Minimal Clean Header: Title + Subtitle only */}
+        <PageHeader
+          title="Attendance Dashboard"
+          subtitle="Live executive turnout across all physical rooms and sections."
+        />
 
         {/* Tab Navigation & Live Refresh Status Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#FDFBF7] p-2 rounded-[12px] border border-[#6B4226]/15 shadow-2xs">
@@ -490,7 +522,7 @@ export default function AdminAttendanceDashboard() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {activeService.sections.map((sec) => (
                   <div
                     key={sec.section}
@@ -658,10 +690,6 @@ export default function AdminAttendanceDashboard() {
           </div>
         )}
       </div>
-
-      <footer className="w-full max-w-[840px] mx-auto px-5 py-4 text-center text-[12px] text-[#1F2A24]/50 border-t border-[#6B4226]/10">
-        Grace Assembly Church Management · Combined Attendance Dashboard · Polling every 7s
-      </footer>
-    </div>
+    </AppShell>
   )
 }

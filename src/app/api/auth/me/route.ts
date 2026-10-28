@@ -32,12 +32,12 @@ export async function POST(request: Request) {
     // 1. Look up person record
     const { data: person } = await supabaseAdmin
       .from('people')
-      .select('id, full_name, email')
+      .select('id, full_name, email, positions')
       .ilike('email', email)
       .maybeSingle()
 
     // 2. Look up staff role & assigned_section
-    let role: string = 'usher'
+    let role: string | null = null
     let assignedSection: string = 'Adults & Youth'
 
     if (userId) {
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         .maybeSingle()
 
       if (!srErr && sr) {
-        if (sr.role) role = sr.role
+        role = sr.role ?? null
         if (sr.assigned_section) assignedSection = sr.assigned_section
       } else {
         // Fallback if column doesn't exist yet
@@ -58,20 +58,20 @@ export async function POST(request: Request) {
           .select('role')
           .eq('user_id', userId)
           .maybeSingle()
-        if (srFallback?.role) role = srFallback.role
+        if (srFallback) role = srFallback.role ?? null
       }
     }
 
-    // Try finding role by person_id
-    if (person) {
+    // Try finding role by person_id if still null
+    if (person && role === null) {
       try {
         const { data: srPerson } = await supabaseAdmin
           .from('staff_roles')
           .select('role')
           .eq('person_id', person.id)
           .maybeSingle()
-        if (srPerson?.role) {
-          role = srPerson.role
+        if (srPerson) {
+          role = srPerson.role ?? null
         }
       } catch {
         // Ignored if column doesn't exist
@@ -86,32 +86,17 @@ export async function POST(request: Request) {
       if (fs.existsSync(devFile)) {
         const rolesMap = JSON.parse(fs.readFileSync(devFile, 'utf-8'))
         const devEntry = (userId && rolesMap[userId]) || (email && rolesMap[email])
-        if (devEntry?.role) role = devEntry.role
+        if (devEntry && devEntry.role !== undefined) role = devEntry.role
         if (devEntry?.section) assignedSection = devEntry.section
       }
     } catch (_) {}
-
-    // Ensure staff_roles has this user_id mapped
-    if (userId) {
-      const { data: existingUserSr } = await supabaseAdmin
-        .from('staff_roles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      if (!existingUserSr) {
-        await supabaseAdmin.from('staff_roles').upsert({
-          user_id: userId,
-          role,
-        })
-      }
-    }
 
     return NextResponse.json({
       email,
       role,
       name: person?.full_name ?? email,
       assigned_section: assignedSection,
+      positions: Array.isArray(person?.positions) ? person.positions : [],
     })
   } catch (err) {
     console.error('Error in /api/auth/me:', err)

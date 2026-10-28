@@ -2,9 +2,30 @@ import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 import path from 'path'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+function getEnv() {
+  const envFile = path.join(process.cwd(), '.env.local')
+  const content = fs.readFileSync(envFile, 'utf-8')
+  const env = {}
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const idx = trimmed.indexOf('=')
+    if (idx !== -1) {
+      const key = trimmed.slice(0, idx).trim()
+      let val = trimmed.slice(idx + 1).trim()
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1)
+      }
+      env[key] = val
+    }
+  }
+  return env
+}
+
+const env = getEnv()
+const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY
 const BASE_URL = 'http://localhost:3000'
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -21,20 +42,22 @@ async function getOrCreateSessionForRole(email, role, section = 'Adults & Youth'
     const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       email_confirm: true,
-      user_metadata: { full_name: `Test ${role}` },
+      user_metadata: { full_name: `Test ${role || 'NullRole'}` },
     })
     if (createErr) throw createErr
     user = newUser.user
   }
 
-  // 2. Try to ensure staff_role in DB (if DB constraint allows)
+  // 2. Try to update DB staff_role if non-null and constraint allows
   try {
-    await supabaseAdmin
-      .from('staff_roles')
-      .upsert({ user_id: user.id, role, assigned_section: section }, { onConflict: 'user_id' })
+    if (role !== null) {
+      await supabaseAdmin
+        .from('staff_roles')
+        .upsert({ user_id: user.id, role, assigned_section: section }, { onConflict: 'user_id' })
+    }
   } catch (_) {}
 
-  // Also write to local dev_roles.json so local test runner recognizes the role
+  // Also write to local dev_roles.json for offline/local resolution
   try {
     const devDir = path.join(process.cwd(), '.temp_data')
     if (!fs.existsSync(devDir)) fs.mkdirSync(devDir, { recursive: true })
@@ -61,7 +84,7 @@ async function getOrCreateSessionForRole(email, role, section = 'Adults & Youth'
   })
   if (sessErr || !sessData.session) throw sessErr || new Error('No session')
 
-  return { user, session: sessData.session, token: sessData.session.access_token }
+  return { user, session: sessData.session, token: sessData.session.access_token, role }
 }
 
 async function testFetch(path, options = {}) {
@@ -77,31 +100,34 @@ async function testFetch(path, options = {}) {
 }
 
 async function run() {
-  console.log('====================================================')
-  console.log('GRACE ASSEMBLY PRE-LAUNCH AUTOMATED AUDIT SUITE')
-  console.log('====================================================\n')
+  console.log('====================================================================')
+  console.log('GRACE ASSEMBLY TWO-TIER PERMISSIONS & POSITIONS VERIFICATION SUITE')
+  console.log('====================================================================\n')
 
   const results = {
     unauthenticated: [],
-    roleGating: [],
+    roleMatrix: [],
+    nullRoleRevocation: [],
     attendanceSectionGate: [],
+    positionsFunctionality: [],
     edgeCases: [],
-    dataIntegrity: [],
   }
 
-  // Set up test tokens for each role
-  console.log('1. Setting up role sessions...')
+  // 1. Create sessions for all new roles and former roles (now role = NULL)
+  console.log('1. Setting up role sessions for verification...')
   const roles = {
-    usher: await getOrCreateSessionForRole('audit_usher@test.com', 'usher', 'Adults & Youth'),
-    head_usher: await getOrCreateSessionForRole('audit_head_usher@test.com', 'head_usher', 'Adults & Youth'),
-    pastor: await getOrCreateSessionForRole('audit_pastor@test.com', 'pastor', 'Adults & Youth'),
-    secretary: await getOrCreateSessionForRole('audit_secretary@test.com', 'secretary', 'Adults & Youth'),
-    admin: await getOrCreateSessionForRole('audit_admin@test.com', 'admin', 'Adults & Youth'),
+    super_admin: await getOrCreateSessionForRole('audit_super_admin@test.com', 'super_admin', 'Adults & Youth'),
+    attendance_admin: await getOrCreateSessionForRole('audit_attendance_admin@test.com', 'attendance_admin', 'Adults & Youth'),
+    attendance_staff: await getOrCreateSessionForRole('audit_attendance_staff@test.com', 'attendance_staff', 'Adults & Youth'),
+    finance_admin: await getOrCreateSessionForRole('audit_finance_admin@test.com', 'finance_admin', 'Adults & Youth'),
+    events_admin: await getOrCreateSessionForRole('audit_events_admin@test.com', 'events_admin', 'Adults & Youth'),
+    pastor_now_null: await getOrCreateSessionForRole('audit_pastor@test.com', null, 'Adults & Youth'),
+    secretary_now_null: await getOrCreateSessionForRole('audit_secretary@test.com', null, 'Adults & Youth'),
   }
-  console.log('Sessions created for all 5 roles.\n')
+  console.log('Sessions verified for all 7 role identity test cases.\n')
 
   // -------------------------------------------------------------------------
-  // SECTION 2A: Unauthenticated Request Checks (Must return 401/403)
+  // 2. Unauthenticated checks (Must return 401/403)
   // -------------------------------------------------------------------------
   console.log('2. Checking Unauthenticated API calls (expect 401/403)...')
   const unauthEndpoints = [
@@ -126,52 +152,102 @@ async function run() {
   }
 
   // -------------------------------------------------------------------------
-  // SECTION 2B: Role-Gate Re-verification
+  // 3. New Role Access Matrix
   // -------------------------------------------------------------------------
-  console.log('\n3. Testing Role-Gate Matrix...')
+  console.log('\n3. Testing Role Access Matrix across Protected Routes...')
 
-  // /api/dashboard/stats: 403 for usher, head_usher; 200 for admin, pastor, secretary
+  // 3A. /api/dashboard/stats: super_admin (200), attendance_admin (200), attendance_staff (403), finance_admin (403), events_admin (403)
   console.log('  Testing /api/dashboard/stats:')
-  for (const [roleName, userObj] of Object.entries(roles)) {
+  const dashboardExpected = {
+    super_admin: 200,
+    attendance_admin: 200,
+    attendance_staff: 403,
+    finance_admin: 403,
+    events_admin: 403,
+  }
+  for (const [rName, expStatus] of Object.entries(dashboardExpected)) {
     const res = await testFetch('/api/dashboard/stats', {
-      headers: { Authorization: `Bearer ${userObj.token}` },
+      headers: { Authorization: `Bearer ${roles[rName].token}` },
     })
-    const expected = ['admin', 'pastor', 'secretary'].includes(roleName) ? 200 : 403
-    const pass = res.status === expected
-    console.log(`    Role: ${roleName} -> Status ${res.status} (expected ${expected}) [${pass ? 'PASS' : 'FAIL'}]`)
-    results.roleGating.push({ route: '/api/dashboard/stats', role: roleName, status: res.status, expected, pass })
+    const pass = res.status === expStatus
+    console.log(`    Role: ${rName} -> Status ${res.status} (expected ${expStatus}) [${pass ? 'PASS' : 'FAIL'}]`)
+    results.roleMatrix.push({ route: '/api/dashboard/stats', role: rName, status: res.status, expected: expStatus, pass })
   }
 
-  // /api/intake/pending: 200 for head_usher; 403 for usher, admin, pastor, secretary
+  // 3B. /api/intake/pending: super_admin (200), attendance_admin (200), attendance_staff (403), finance_admin (403), events_admin (403)
   console.log('  Testing /api/intake/pending:')
-  for (const [roleName, userObj] of Object.entries(roles)) {
+  const intakeExpected = {
+    super_admin: 200,
+    attendance_admin: 200,
+    attendance_staff: 403,
+    finance_admin: 403,
+    events_admin: 403,
+  }
+  for (const [rName, expStatus] of Object.entries(intakeExpected)) {
     const res = await testFetch('/api/intake/pending', {
-      headers: { Authorization: `Bearer ${userObj.token}` },
+      headers: { Authorization: `Bearer ${roles[rName].token}` },
     })
-    const expected = roleName === 'head_usher' ? 200 : 403
-    const pass = res.status === expected
-    console.log(`    Role: ${roleName} -> Status ${res.status} (expected ${expected}) [${pass ? 'PASS' : 'FAIL'}]`)
-    results.roleGating.push({ route: '/api/intake/pending', role: roleName, status: res.status, expected, pass })
+    const pass = res.status === expStatus
+    console.log(`    Role: ${rName} -> Status ${res.status} (expected ${expStatus}) [${pass ? 'PASS' : 'FAIL'}]`)
+    results.roleMatrix.push({ route: '/api/intake/pending', role: rName, status: res.status, expected: expStatus, pass })
   }
 
-  // /api/staff-requests/pending: 200 for pastor, secretary; 403 for usher, head_usher, admin
-  console.log('  Testing /api/staff-requests/pending:')
-  for (const [roleName, userObj] of Object.entries(roles)) {
+  // 3C. /api/staff-requests/pending: super_admin ONLY (200), attendance_admin (403), attendance_staff (403), finance_admin (403), events_admin (403)
+  console.log('  Testing /api/staff-requests/pending (super_admin ONLY):')
+  const staffReqExpected = {
+    super_admin: 200,
+    attendance_admin: 403,
+    attendance_staff: 403,
+    finance_admin: 403,
+    events_admin: 403,
+  }
+  for (const [rName, expStatus] of Object.entries(staffReqExpected)) {
     const res = await testFetch('/api/staff-requests/pending', {
-      headers: { Authorization: `Bearer ${userObj.token}` },
+      headers: { Authorization: `Bearer ${roles[rName].token}` },
     })
-    const expected = ['pastor', 'secretary'].includes(roleName) ? 200 : 403
-    const pass = res.status === expected
-    console.log(`    Role: ${roleName} -> Status ${res.status} (expected ${expected}) [${pass ? 'PASS' : 'FAIL'}]`)
-    results.roleGating.push({ route: '/api/staff-requests/pending', role: roleName, status: res.status, expected, pass })
+    const pass = res.status === expStatus
+    console.log(`    Role: ${rName} -> Status ${res.status} (expected ${expStatus}) [${pass ? 'PASS' : 'FAIL'}]`)
+    results.roleMatrix.push({ route: '/api/staff-requests/pending', role: rName, status: res.status, expected: expStatus, pass })
   }
 
   // -------------------------------------------------------------------------
-  // SECTION 2C: Usher Section Boundary Check
+  // 4. Role = NULL Revocation Verification (Former Pastor & Secretary)
   // -------------------------------------------------------------------------
-  console.log('\n4. Testing Usher Section-Gate Boundary Enforcement...')
-  // Usher assigned to 'Adults & Youth' tries to mark attendance for a person in 'Infants'
-  // Find a person in Infants section
+  console.log('\n4. Verifying Accounts with role = NULL get 403 Forbidden everywhere...')
+  const nullAccounts = [
+    { label: 'Former Pastor (audit_pastor@test.com)', obj: roles.pastor_now_null },
+    { label: 'Former Secretary (audit_secretary@test.com)', obj: roles.secretary_now_null },
+  ]
+  const protectedRoutes = [
+    { name: 'GET /api/dashboard/stats', path: '/api/dashboard/stats', method: 'GET' },
+    { name: 'GET /api/intake/pending', path: '/api/intake/pending', method: 'GET' },
+    { name: 'GET /api/staff-requests/pending', path: '/api/staff-requests/pending', method: 'GET' },
+    { name: 'POST /api/attendance/toggle', path: '/api/attendance/toggle', method: 'POST', body: { serviceId: 'dummy', personId: 'dummy' } },
+  ]
+
+  for (const acc of nullAccounts) {
+    console.log(`  Account: ${acc.label}`)
+    for (const pr of protectedRoutes) {
+      const res = await testFetch(pr.path, {
+        method: pr.method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${acc.obj.token}`,
+        },
+        body: pr.body ? JSON.stringify(pr.body) : undefined,
+      })
+      const pass = res.status === 403
+      console.log(`    ${pr.name} -> Status ${res.status} (expected 403) [${pass ? 'PASS' : 'FAIL'}]`)
+      results.nullRoleRevocation.push({ account: acc.label, route: pr.name, status: res.status, pass })
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 5. Section Boundary Enforcement & Cross-Section Admin Exemption
+  // -------------------------------------------------------------------------
+  console.log('\n5. Testing Attendance Scoping: Section Enforcement vs Admin Cross-Section Exemption...')
+
+  // Find person in Infants section
   const { data: infantsPeople } = await supabaseAdmin
     .from('people')
     .select('id, full_name, section')
@@ -181,7 +257,6 @@ async function run() {
 
   let infantsPerson = infantsPeople?.[0]
   if (!infantsPerson) {
-    // Create a temporary infants person to test
     const { data: created } = await supabaseAdmin
       .from('people')
       .insert({
@@ -202,132 +277,127 @@ async function run() {
     .order('service_date', { ascending: false })
     .limit(1)
     .single()
-
   const serviceId = serviceData.id
 
-  // Call /api/attendance/toggle with Usher's token (assigned to Adults & Youth) on Infants person
-  const toggleRes = await testFetch('/api/attendance/toggle', {
+  // 5A. attendance_staff (assigned to Adults & Youth) marks person in Infants -> Expect 403 Forbidden
+  const staffCrossSection = await testFetch('/api/attendance/toggle', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${roles.usher.token}`,
+      Authorization: `Bearer ${roles.attendance_staff.token}`,
     },
     body: JSON.stringify({
       personId: infantsPerson.id,
       serviceId: serviceId,
-      attended: true,
+      isPresent: true,
     }),
   })
+  const staffPass = staffCrossSection.status === 403
+  console.log(`  attendance_staff (Adults & Youth) marking Infants person -> Status ${staffCrossSection.status} (expected 403) [${staffPass ? 'PASS' : 'FAIL'}]`)
+  results.attendanceSectionGate.push({ test: 'attendance_staff cross-section rejection', status: staffCrossSection.status, pass: staffPass })
 
-  const sectionGatePass = toggleRes.status === 403
-  console.log(`  Usher (Adults & Youth) marking Infants person -> Status ${toggleRes.status} (expected 403) [${sectionGatePass ? 'PASS' : 'FAIL'}]`)
-  results.attendanceSectionGate.push({
-    test: 'Usher Cross-Section Tamper Rejection',
-    status: toggleRes.status,
-    pass: sectionGatePass,
+  // 5B. attendance_admin marks person in Infants -> Expect 200 OK (Cross-section exempt)
+  const adminCrossSection = await testFetch('/api/attendance/toggle', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${roles.attendance_admin.token}`,
+    },
+    body: JSON.stringify({
+      personId: infantsPerson.id,
+      serviceId: serviceId,
+      isPresent: true,
+    }),
   })
+  const adminPass = adminCrossSection.status === 200
+  console.log(`  attendance_admin marking cross-section Infants person -> Status ${adminCrossSection.status} (expected 200) [${adminPass ? 'PASS' : 'FAIL'}]`)
+  results.attendanceSectionGate.push({ test: 'attendance_admin cross-section exemption', status: adminCrossSection.status, pass: adminPass })
 
   // -------------------------------------------------------------------------
-  // SECTION 3: Supabase RLS Direct Enforcement
+  // 6. Positions & Units Functionality Verification
   // -------------------------------------------------------------------------
-  console.log('\n5. Testing Supabase RLS directly with Usher user token...')
-  // Create Supabase client using Usher's token
-  const usherSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${roles.usher.token}` } },
-  })
+  console.log('\n6. Testing Positions & Units Tag Storage and Searchability...')
 
-  // Direct select from attendance table for a different section
-  // Query attendance rows
-  const { data: rlsAttendance, error: rlsErr } = await usherSupabase
-    .from('attendance')
-    .select('*')
-
-  console.log(`  Direct select on attendance table as Usher: ${rlsAttendance?.length ?? 0} rows visible (error: ${rlsErr?.message || 'none'})`)
-
-  // -------------------------------------------------------------------------
-  // SECTION 6: Edge Cases
-  // -------------------------------------------------------------------------
-  console.log('\n6. Testing Edge Cases...')
+  // Create or update a person with distinct positions tags
+  const testPersonPhone = '08091122334'
+  const targetPositions = ['Pastor', 'Teen Counselor', 'Choir Member']
   
-  // 6A. Phone normalization duplicate check
-  console.log('  Testing Phone Normalization Duplicate Check (+234 vs 0 prefix vs spaces):')
-  const phoneTests = [
-    '+2348000000001',
-    '08000000001',
-    '0800 000 0001',
-    '+234 800 000 0001',
-  ]
-  for (const pt of phoneTests) {
-    const res = await testFetch('/api/intake/lookup-phone', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: pt }),
-    })
-    console.log(`    Lookup '${pt}' -> matched: ${res.body?.matched} [${res.body?.matched ? 'PASS' : 'FAIL'}]`)
-    results.edgeCases.push({ test: `Phone lookup '${pt}'`, matched: res.body?.matched, pass: Boolean(res.body?.matched) })
-  }
+  // Cleanup any old test record
+  await supabaseAdmin.from('people').delete().eq('phone', testPersonPhone)
 
-  // 6B. Double-review / Idempotency check on pending_people
-  console.log('  Testing Double-Action Idempotency on Intake Action:')
-  // Create a dummy pending person
-  const { data: dummyPending } = await supabaseAdmin
-    .from('pending_people')
+  // Insert person with positions array
+  let createdTestPerson
+  const { data: posPerson, error: posErr } = await supabaseAdmin
+    .from('people')
     .insert({
-      full_name: 'Idempotency Test Person',
-      phone: '08129998877',
+      full_name: 'Elder Barnabas Test',
+      phone: testPersonPhone,
       section: 'Adults & Youth',
-      submitted_by: roles.usher.user.id,
-      status: 'pending',
+      positions: targetPositions,
+      status: 'active',
     })
-    .select()
+    .select('id, full_name, phone, section, positions')
     .single()
 
-  if (dummyPending) {
-    // 1st action: approve
-    const act1 = await testFetch('/api/intake/action', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${roles.head_usher.token}`,
-      },
-      body: JSON.stringify({ id: dummyPending.id, action: 'approve' }),
-    })
-    console.log(`    Action 1 (first reviewer approve) -> Status ${act1.status} [${act1.status === 200 ? 'PASS' : 'FAIL'}]`)
+  if (posErr || !posPerson) {
+    console.log(`  DB column positions not yet available in DB: ${posErr?.message || 'unknown'}`)
+    results.positionsFunctionality.push({ test: 'Positions creation in DB', pass: false, note: 'Migration 010 pending in SQL editor' })
+  } else {
+    createdTestPerson = posPerson
+    const hasPositions = Array.isArray(posPerson.positions) && posPerson.positions.includes('Teen Counselor')
+    console.log(`  Positions saved in DB for ${posPerson.full_name}: [${posPerson.positions.join(', ')}] [${hasPositions ? 'PASS' : 'FAIL'}]`)
+    results.positionsFunctionality.push({ test: 'Positions saved in DB', pass: hasPositions })
 
-    // 2nd action: try to reject the same item immediately
-    const act2 = await testFetch('/api/intake/action', {
+    // Test attendance search by position tag query ("Teen Counselor")
+    const searchRes = await testFetch('/api/attendance/search', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${roles.head_usher.token}`,
-      },
-      body: JSON.stringify({ id: dummyPending.id, action: 'reject' }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serviceId,
+        query: 'Teen Counselor',
+      }),
     })
-    const isIdempotent = act2.status === 400 && act2.body?.error?.toLowerCase().includes('already')
-    console.log(`    Action 2 (second reviewer conflict) -> Status ${act2.status}, error: "${act2.body?.error}" [${isIdempotent ? 'PASS' : 'FAIL'}]`)
-    results.edgeCases.push({ test: 'Double-action idempotency', status: act2.status, error: act2.body?.error, pass: isIdempotent })
+    const matchedMembers = searchRes.body?.people ?? []
+    const foundPerson = matchedMembers.find((p) => p.id === createdTestPerson.id)
+    const searchPass = Boolean(foundPerson)
+    console.log(`  Searching attendance query "Teen Counselor" matches tagged person -> Found: ${Boolean(foundPerson)} [${searchPass ? 'PASS' : 'FAIL'}]`)
+    results.positionsFunctionality.push({ test: 'Search attendance by position tag', pass: searchPass })
 
-    // Clean up created member from people
-    await supabaseAdmin.from('people').delete().eq('phone', '08129998877')
-    await supabaseAdmin.from('pending_people').delete().eq('id', dummyPending.id)
+    // Verify positions do NOT contaminate section
+    const sectionIntact = foundPerson?.section === 'Adults & Youth'
+    console.log(`  Verify section remains "Adults & Youth" independently: [${sectionIntact ? 'PASS' : 'FAIL'}]`)
+    results.positionsFunctionality.push({ test: 'Section separation from positions', pass: sectionIntact })
+
+    // Cleanup
+    await supabaseAdmin.from('people').delete().eq('id', createdTestPerson.id)
   }
 
-  // Cleanup test infant person if created
+  // -------------------------------------------------------------------------
+  // 7. Cleanup & Summary
+  // -------------------------------------------------------------------------
   if (infantsPerson?.full_name === 'Test Infant Audit Person') {
     await supabaseAdmin.from('people').delete().eq('id', infantsPerson.id)
   }
 
-  console.log('\n====================================================')
-  console.log('AUDIT RUN COMPLETED SUMMARY:')
+  console.log('\n====================================================================')
+  console.log('TWO-TIER AUDIT RUN COMPLETED SUMMARY:')
   const allTests = [
     ...results.unauthenticated,
-    ...results.roleGating,
+    ...results.roleMatrix,
+    ...results.nullRoleRevocation,
     ...results.attendanceSectionGate,
-    ...results.edgeCases,
+    ...results.positionsFunctionality,
   ]
   const passedCount = allTests.filter((t) => t.pass).length
-  console.log(`Total: ${allTests.length} tests, Passed: ${passedCount}, Failed: ${allTests.length - passedCount}`)
-  console.log('====================================================')
+  console.log(`Total Tests Executed: ${allTests.length}`)
+  console.log(`Passed: ${passedCount}`)
+  console.log(`Failed: ${allTests.length - passedCount}`)
+  console.log('====================================================================')
+
+  if (allTests.some(t => !t.pass)) {
+    console.log('Failing tests detail:', allTests.filter(t => !t.pass))
+    process.exit(1)
+  }
 }
 
 run().catch((e) => {

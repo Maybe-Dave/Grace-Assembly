@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import fs from 'fs'
 import path from 'path'
 
-const ALLOWED_ROLES = ['usher', 'head_usher'] as const
+const ALLOWED_ROLES = ['attendance_staff', 'attendance_admin', 'usher', 'head_usher'] as const
 const ALLOWED_SECTIONS = ['Adults & Youth', 'Infants', 'Older Children', 'Teenagers'] as const
 
 const FALLBACK_DIR = path.join(process.cwd(), '.temp_data')
@@ -35,8 +35,12 @@ export async function POST(request: Request) {
     const fullName = (body?.fullName ?? '').trim()
     const rawEmail = (body?.email ?? '').trim().toLowerCase()
     const phone = (body?.phone ?? '').trim()
-    const requestedRole = (body?.requestedRole ?? '').trim().toLowerCase()
+    let requestedRole = (body?.requestedRole ?? '').trim().toLowerCase()
     const requestedSection = (body?.requestedSection ?? '').trim()
+
+    // Normalize legacy role names if submitted
+    if (requestedRole === 'usher') requestedRole = 'attendance_staff'
+    if (requestedRole === 'head_usher') requestedRole = 'attendance_admin'
 
     // 1. Validate fields
     if (!fullName) {
@@ -52,10 +56,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Phone number is required.' }, { status: 400 })
     }
 
-    // Strictly enforce role: ONLY usher or head_usher allowed (do NOT allow self-selecting admin, pastor, or secretary)
+    // Strictly enforce role: ONLY attendance_staff or attendance_admin allowed
     if (!ALLOWED_ROLES.includes(requestedRole as any)) {
       return NextResponse.json(
-        { error: 'Invalid requested role. Only Usher or Head Usher can be requested.' },
+        { error: 'Invalid requested role. Only Attendance Staff or Attendance Admin can be requested.' },
         { status: 400 }
       )
     }

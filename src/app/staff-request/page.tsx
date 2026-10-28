@@ -2,37 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-
-function RooflineMark() {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="text-[#1F2A24]"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.5 14.5L12 5.5L21.5 14.5"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6 11V18.5H18V11"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="2 3"
-        opacity="0.5"
-      />
-    </svg>
-  )
-}
+import GraceAssemblyMark from '@/components/layout/GraceAssemblyMark'
 
 const SECTIONS = ['Adults & Youth', 'Infants', 'Older Children', 'Teenagers'] as const
 
@@ -40,7 +10,7 @@ export default function StaffRequestPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [requestedRole, setRequestedRole] = useState<'usher' | 'head_usher'>('usher')
+  const [requestedRole, setRequestedRole] = useState<'attendance_staff' | 'attendance_admin'>('attendance_staff')
   const [requestedSection, setRequestedSection] = useState<string>('Adults & Youth')
 
   const [loading, setLoading] = useState(false)
@@ -104,7 +74,7 @@ export default function StaffRequestPage() {
         {/* Brand header */}
         <div className="flex items-center justify-between mb-8">
           <Link href="/" className="flex items-center space-x-2.5 group">
-            <RooflineMark />
+            <GraceAssemblyMark size={22} />
             <span className="font-fraunces text-[18px] font-bold text-[#1F2A24] tracking-tight group-hover:text-[#A8763E] transition-colors">
               Grace Assembly
             </span>
@@ -128,10 +98,10 @@ export default function StaffRequestPage() {
             <p className="text-[15px] text-[#1F2A24]/75 font-work-sans leading-relaxed mb-4">
               Thank you, <strong className="text-[#1F2A24]">{fullName}</strong>. Your request to serve as{' '}
               <strong className="text-[#A8763E]">
-                {requestedRole === 'head_usher' ? 'Head Usher' : 'Usher'}
+                {requestedRole === 'attendance_admin' ? 'Attendance Admin' : 'Attendance Staff'}
               </strong>{' '}
               for the <strong className="text-[#1F2A24]">{requestedSection}</strong> section has been sent to
-              church leadership (Pastor & Secretary) for review.
+              church leadership (Super Admin) for review.
             </p>
             <div className="p-3.5 bg-[#A8763E]/10 rounded-[8px] border border-[#A8763E]/25 text-[#6B4226] text-[13px] leading-normal mb-6">
               ℹ️ Once leadership approves your request, you will be able to sign in directly using{' '}
@@ -149,14 +119,13 @@ export default function StaffRequestPage() {
           <div>
             <div className="mb-6">
               <p className="text-[13px] uppercase font-bold tracking-wider text-[#A8763E] font-work-sans mb-1">
-                Usher Team Onboarding
+                Staff Onboarding
               </p>
               <h1 className="font-fraunces text-[32px] font-bold text-[#1F2A24] leading-tight mb-2 tracking-tight">
                 Request Staff Access
               </h1>
               <p className="text-[15px] text-[#1F2A24]/65 font-work-sans leading-relaxed">
-                Submit your serving details below. Requests are verified and approved by the Pastor or
-                Church Secretary before access is granted.
+                Submit your serving details below. Requests are verified and approved by the Super Admin before access is granted.
               </p>
             </div>
 
@@ -234,7 +203,7 @@ export default function StaffRequestPage() {
                 />
               </div>
 
-              {/* Requested Role (ONLY Usher or Head Usher - explicitly no admin, pastor, secretary) */}
+              {/* Requested Role (ONLY Attendance Staff or Attendance Admin) */}
               <div>
                 <label className="block text-[13px] font-medium text-[#1F2A24]/80 mb-2 font-work-sans">
                   Requested Role <span className="text-[#C94F3D]">*</span>
@@ -242,29 +211,29 @@ export default function StaffRequestPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    id="role-select-usher"
-                    onClick={() => setRequestedRole('usher')}
+                    id="role-select-attendance-staff"
+                    onClick={() => setRequestedRole('attendance_staff')}
                     className={`py-2.5 px-3 text-left rounded-[8px] border transition-all cursor-pointer ${
-                      requestedRole === 'usher'
+                      requestedRole === 'attendance_staff'
                         ? 'border-[#A8763E] bg-[#A8763E]/10 text-[#1F2A24] ring-1 ring-[#A8763E]'
                         : 'border-[#6B4226]/30 bg-[#F7F3EC] text-[#1F2A24]/70 hover:border-[#6B4226]/60'
                     }`}
                   >
-                    <div className="font-semibold text-[14px]">Usher</div>
+                    <div className="font-semibold text-[14px]">Attendance Staff</div>
                     <div className="text-[11px] text-[#1F2A24]/60">Section attendance marking</div>
                   </button>
 
                   <button
                     type="button"
-                    id="role-select-head-usher"
-                    onClick={() => setRequestedRole('head_usher')}
+                    id="role-select-attendance-admin"
+                    onClick={() => setRequestedRole('attendance_admin')}
                     className={`py-2.5 px-3 text-left rounded-[8px] border transition-all cursor-pointer ${
-                      requestedRole === 'head_usher'
+                      requestedRole === 'attendance_admin'
                         ? 'border-[#A8763E] bg-[#A8763E]/10 text-[#1F2A24] ring-1 ring-[#A8763E]'
                         : 'border-[#6B4226]/30 bg-[#F7F3EC] text-[#1F2A24]/70 hover:border-[#6B4226]/60'
                     }`}
                   >
-                    <div className="font-semibold text-[14px]">Head Usher</div>
+                    <div className="font-semibold text-[14px]">Attendance Admin</div>
                     <div className="text-[11px] text-[#1F2A24]/60">Member intake & roster approval</div>
                   </button>
                 </div>

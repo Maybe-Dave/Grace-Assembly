@@ -51,14 +51,14 @@ export async function GET(request: Request) {
       }
     } catch (_) {}
 
-    // Role gate: Only admin, pastor, or secretary can view dashboard.
-    // ushers and head_usher MUST receive 403 Forbidden.
-    const ALLOWED_DASHBOARD_ROLES = ['admin', 'pastor', 'secretary']
+    // Role gate: Only super_admin or attendance_admin can view dashboard.
+    // attendance_staff, finance_*, events_*, and NULL roles MUST receive 403 Forbidden.
+    const ALLOWED_DASHBOARD_ROLES = ['super_admin', 'attendance_admin']
     if (!callerRole || !ALLOWED_DASHBOARD_ROLES.includes(callerRole)) {
       return NextResponse.json(
         {
           error:
-            'Forbidden: admin, pastor, or secretary role required to access the combined attendance dashboard.',
+            'Forbidden: super_admin or attendance_admin role required to access the combined attendance dashboard.',
           userRole: callerRole || 'unknown',
         },
         { status: 403 }
@@ -66,20 +66,51 @@ export async function GET(request: Request) {
     }
 
     // 2. Fetch all services (ordered by date descending)
-    const { data: servicesData, error: servicesErr } = await supabaseAdmin
+    let servicesData: any[] = []
+    const { data: dbServices, error: servicesErr } = await supabaseAdmin
       .from('services')
-      .select('id, type, service_date, service_time, created_at')
+      .select('id, type, service_date, service_time, created_at, status')
       .order('service_date', { ascending: false })
       .order('service_time', { ascending: false })
 
-    if (servicesErr || !servicesData || servicesData.length === 0) {
+    if (!servicesErr && dbServices) {
+      servicesData = dbServices
+    } else {
+      const { data: fallbackServices } = await supabaseAdmin
+        .from('services')
+        .select('id, type, service_date, service_time, created_at')
+        .order('service_date', { ascending: false })
+        .order('service_time', { ascending: false })
+      servicesData = fallbackServices || []
+    }
+
+    // Check for stored active service fallback if needed
+    let storedActive: any = null
+    try {
+      const tempFile = path.join(process.cwd(), '.temp_data', 'active_service.json')
+      if (fs.existsSync(tempFile)) {
+        storedActive = JSON.parse(fs.readFileSync(tempFile, 'utf-8'))
+      }
+    } catch (_) {}
+
+    if (servicesData.length === 0 && !storedActive) {
       return NextResponse.json({
         activeService: null,
         historicalServices: [],
       })
     }
 
-    const activeService = servicesData[0]
+    // Find active service (by status='active', then stored fallback, then most recent)
+    let activeService = servicesData.find((s) => s.status === 'active') || null
+    if (!activeService && storedActive) {
+      activeService = storedActive
+      if (!servicesData.some((s) => s.id === storedActive.id)) {
+        servicesData.unshift(storedActive)
+      }
+    }
+    if (!activeService && servicesData.length > 0) {
+      activeService = servicesData[0]
+    }
 
     // 3. Fetch active people with sections and unit info
     let peopleList: any[] = []

@@ -134,7 +134,7 @@ Migrations live in `supabase/migrations/`:
 
 ## Role Model & Staff Sign-in
 
-1. **Staff Email OTP**: Sign-in on `/` uses Supabase 8-digit email OTP.
+1. **Staff Email OTP**: Sign-in on `/` uses Supabase 6-digit email OTP.
 2. **Pre-flight Check**: Rejects unregistered emails before sending any code.
 3. **Attendance Entry**: Authenticated staff (admin or usher role) land directly on `/attendance`.
 4. **Session Guard**: Direct unauthenticated access to `/attendance` automatically redirects to `/`.

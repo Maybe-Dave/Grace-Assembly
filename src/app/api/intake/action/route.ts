@@ -67,10 +67,11 @@ export async function POST(request: Request) {
       )
     }
 
-    // Role check: ONLY head_usher is permitted
-    if (callerRole !== 'head_usher') {
+    // Role check: super_admin and attendance_admin are permitted
+    const ALLOWED_INTAKE_ACTION_ROLES = ['super_admin', 'attendance_admin']
+    if (!callerRole || !ALLOWED_INTAKE_ACTION_ROLES.includes(callerRole)) {
       return NextResponse.json(
-        { error: 'Forbidden: head_usher role required to approve submissions.' },
+        { error: 'Forbidden: super_admin or attendance_admin role required to approve submissions.' },
         { status: 403 }
       )
     }
@@ -178,6 +179,40 @@ export async function POST(request: Request) {
         }
         createdPerson = baseP
       }
+
+      // Automatically mark the newly approved person present for the active service session
+      try {
+        let activeServiceId: string | null = null
+        const { data: actSvc } = await supabaseAdmin
+          .from('services')
+          .select('id')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (actSvc?.id) {
+          activeServiceId = actSvc.id
+        } else {
+          const tempFile = path.join(process.cwd(), '.temp_data', 'active_service.json')
+          if (fs.existsSync(tempFile)) {
+            const stored = JSON.parse(fs.readFileSync(tempFile, 'utf-8'))
+            if (stored?.id) activeServiceId = stored.id
+          }
+        }
+
+        if (activeServiceId && createdPerson?.id) {
+          await supabaseAdmin.from('attendance').upsert(
+            {
+              service_id: activeServiceId,
+              person_id: createdPerson.id,
+              marked_by: callerId,
+            },
+            { onConflict: 'service_id,person_id' }
+          )
+        }
+      } catch (attErr) {
+        console.error('Failed to auto-mark attendance on intake approval:', attErr)
+      }
     } else if (action === 'merge') {
       // Merge: keep existing record, optionally update unit/section if requested
       if (pendingItem.duplicate_matched_person_id) {
@@ -186,6 +221,38 @@ export async function POST(request: Request) {
             .from('people')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', pendingItem.duplicate_matched_person_id)
+        } catch (_) {}
+
+        // Also mark merged person present in active service session
+        try {
+          let activeServiceId: string | null = null
+          const { data: actSvc } = await supabaseAdmin
+            .from('services')
+            .select('id')
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (actSvc?.id) {
+            activeServiceId = actSvc.id
+          } else {
+            const tempFile = path.join(process.cwd(), '.temp_data', 'active_service.json')
+            if (fs.existsSync(tempFile)) {
+              const stored = JSON.parse(fs.readFileSync(tempFile, 'utf-8'))
+              if (stored?.id) activeServiceId = stored.id
+            }
+          }
+
+          if (activeServiceId) {
+            await supabaseAdmin.from('attendance').upsert(
+              {
+                service_id: activeServiceId,
+                person_id: pendingItem.duplicate_matched_person_id,
+                marked_by: callerId,
+              },
+              { onConflict: 'service_id,person_id' }
+            )
+          }
         } catch (_) {}
       }
     }
