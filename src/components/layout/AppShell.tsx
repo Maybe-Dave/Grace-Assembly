@@ -17,6 +17,7 @@ export interface AppShellProps {
 
 import GraceAssemblyMark from '@/components/layout/GraceAssemblyMark'
 import { formatRoleLabel, normalizeRole } from '@/lib/roles'
+import { clearDeviceSession, isDeviceSessionValid } from '@/lib/deviceSession'
 
 export default function AppShell({
   children,
@@ -60,6 +61,10 @@ export default function AppShell({
     if (role) return
     async function loadUser() {
       try {
+        if (!isDeviceSessionValid()) {
+          handleSignOut()
+          return
+        }
         const { data } = await supabase.auth.getSession()
         const sess = data?.session
         if (!sess) return
@@ -87,6 +92,7 @@ export default function AppShell({
   async function handleSignOut() {
     setSigningOut(true)
     try {
+      clearDeviceSession()
       await supabase.auth.signOut()
       try {
         for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -206,34 +212,12 @@ export default function AppShell({
     <div className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col md:flex-row selection:bg-[#A8763E]/20">
       {/* Mobile Top Header (< 640px) */}
       <div className="md:hidden sticky top-0 z-40 bg-[#FDFBF7] border-b border-[#6B4226]/15 px-4 py-3 flex items-center justify-between shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            id="mobile-nav-toggle-btn"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 -ml-1.5 text-[#1F2A24] hover:bg-[#6B4226]/5 rounded-[8px] cursor-pointer"
-            aria-label="Toggle navigation menu"
-          >
-            {mobileMenuOpen ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <line x1="4" y1="6" x2="20" y2="6" />
-                <line x1="4" y1="12" x2="20" y2="12" />
-                <line x1="4" y1="18" x2="20" y2="18" />
-              </svg>
-            )}
-          </button>
-          <Link href="/home" className="flex items-center gap-2">
-            <GraceAssemblyMark size={22} />
-            <span className="font-fraunces text-[17px] font-bold text-[#1F2A24] tracking-tight">
-              Grace Assembly
-            </span>
-          </Link>
-        </div>
+        <Link href="/home" className="flex items-center gap-2">
+          <GraceAssemblyMark size={22} />
+          <span className="font-fraunces text-[17px] font-bold text-[#1F2A24] tracking-tight">
+            Grace Assembly
+          </span>
+        </Link>
 
         {/* Mobile Quick Sync Status */}
         <div className="flex items-center gap-2">

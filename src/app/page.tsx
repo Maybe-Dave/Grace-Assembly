@@ -4,6 +4,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import GraceAssemblyMark from '@/components/layout/GraceAssemblyMark'
+import {
+  recordDeviceLogin,
+  isDeviceSessionValid,
+  clearDeviceSession,
+  getRememberedEmail,
+  setRememberedEmail,
+  isRememberEmailEnabled,
+} from '@/lib/deviceSession'
 
 const OTP_LENGTH = 8
 
@@ -11,6 +19,7 @@ export default function WelcomeSignInPage() {
   const router = useRouter()
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [email, setEmail] = useState('')
+  const [rememberEmail, setRememberEmail] = useState(true)
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''))
   const [greeting, setGreeting] = useState('Good morning')
   const [loading, setLoading] = useState(false)
@@ -21,7 +30,7 @@ export default function WelcomeSignInPage() {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
   const code = otp.join('')
 
-  // Compute time-appropriate greeting on mount
+  // Compute time-appropriate greeting and load remembered email on mount
   useEffect(() => {
     const hour = new Date().getHours()
     if (hour < 12) {
@@ -30,6 +39,16 @@ export default function WelcomeSignInPage() {
       setGreeting('Good afternoon')
     } else {
       setGreeting('Good evening')
+    }
+
+    const savedEmail = getRememberedEmail()
+    if (savedEmail) {
+      setEmail(savedEmail)
+    }
+    setRememberEmail(isRememberEmailEnabled())
+
+    if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
+      setError('Your 30-day session has ended. Please enter your email to sign in.')
     }
   }, [])
 
@@ -52,10 +71,17 @@ export default function WelcomeSignInPage() {
     return () => clearInterval(timer)
   }, [resendCooldown])
 
-  // If already authenticated, advance to /home
+  // If already authenticated, advance to /home (enforcing 30-day device lifetime)
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        if (!isDeviceSessionValid()) {
+          supabase.auth.signOut().then(() => {
+            clearDeviceSession()
+            setError('Your 30-day session has expired for security. Please sign in again.')
+          })
+          return
+        }
         router.replace('/home')
       }
     })
@@ -266,6 +292,11 @@ export default function WelcomeSignInPage() {
         }).catch(() => null)
       }
 
+      // Record 30-day device login and store/clear remembered email
+      const verifiedEmail = email.trim().toLowerCase()
+      recordDeviceLogin(verifiedEmail)
+      setRememberedEmail(verifiedEmail, rememberEmail)
+
       // Successful verification -> navigate to /home
       router.push('/home')
     } catch (err) {
@@ -336,6 +367,9 @@ export default function WelcomeSignInPage() {
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         })
+        const devEmail = data.session.user?.email || 'dev@graceassembly.internal'
+        recordDeviceLogin(devEmail)
+        setRememberedEmail(devEmail, true)
         router.push('/home')
       } else {
         setError(data?.error || 'Dev login failed')
@@ -430,6 +464,28 @@ export default function WelcomeSignInPage() {
                 disabled={loading}
                 className="w-full bg-transparent border-0 border-b border-[#6B4226]/50 focus:border-[#A8763E] text-[#1F2A24] text-[16px] py-2.5 px-0 rounded-none outline-none transition-colors placeholder:text-[#1F2A24]/30 disabled:opacity-60 font-work-sans"
               />
+
+              {/* Remember email & device checkbox */}
+              <div className="mt-3 flex items-center justify-between text-[13px] text-[#1F2A24]/75">
+                <label htmlFor="remember-device-checkbox" className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    id="remember-device-checkbox"
+                    type="checkbox"
+                    checked={rememberEmail}
+                    onChange={(e) => {
+                      setRememberEmail(e.target.checked)
+                      if (!e.target.checked) {
+                        setRememberedEmail('', false)
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-[#6B4226]/40 text-[#A8763E] focus:ring-[#A8763E]/30 accent-[#A8763E] cursor-pointer"
+                  />
+                  <span>Remember this device (30 days)</span>
+                </label>
+                {rememberEmail && email && (
+                  <span className="text-[11px] text-[#4C6B52] font-medium">Auto-saved</span>
+                )}
+              </div>
             </div>
 
             {/* 6. "Send code" button: full width, #A8763E bg, #F7F3EC text, 10px radius, 16px padding */}

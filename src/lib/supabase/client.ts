@@ -14,4 +14,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * Browser-safe Supabase client using the anon key.
  * Use this in Client Components and the health-check page.
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})

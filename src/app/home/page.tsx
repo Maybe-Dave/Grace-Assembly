@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import AppShell from '@/components/layout/AppShell'
 import PageHeader from '@/components/layout/PageHeader'
 import { normalizeRole } from '@/lib/roles'
+import { clearDeviceSession, isDeviceSessionValid } from '@/lib/deviceSession'
 
 interface ActiveService {
   id: string
@@ -154,6 +155,15 @@ export default function HomePage() {
 
         if (!session) {
           router.replace('/')
+          return
+        }
+
+        if (!isDeviceSessionValid()) {
+          try {
+            await supabase.auth.signOut()
+          } catch (_) {}
+          clearDeviceSession()
+          router.replace('/?expired=1')
           return
         }
 
