@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 
@@ -68,8 +69,9 @@ export async function POST(request: Request) {
     }
 
     // Role check: super_admin and attendance_admin are permitted
+    const effectiveRole = normalizeRole(callerRole)
     const ALLOWED_INTAKE_ACTION_ROLES = ['super_admin', 'attendance_admin']
-    if (!callerRole || !ALLOWED_INTAKE_ACTION_ROLES.includes(callerRole)) {
+    if (!effectiveRole || !ALLOWED_INTAKE_ACTION_ROLES.includes(effectiveRole)) {
       return NextResponse.json(
         { error: 'Forbidden: super_admin or attendance_admin role required to approve submissions.' },
         { status: 403 }

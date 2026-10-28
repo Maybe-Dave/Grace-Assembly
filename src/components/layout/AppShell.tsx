@@ -16,27 +16,7 @@ export interface AppShellProps {
 }
 
 import GraceAssemblyMark from '@/components/layout/GraceAssemblyMark'
-
-function formatRoleLabel(role: string): string {
-  switch (role) {
-    case 'super_admin':
-      return 'Super Admin'
-    case 'attendance_admin':
-      return 'Attendance Admin'
-    case 'attendance_staff':
-      return 'Attendance Staff'
-    case 'finance_admin':
-      return 'Finance Admin'
-    case 'finance_staff':
-      return 'Finance Staff'
-    case 'events_admin':
-      return 'Events Admin'
-    case 'events_staff':
-      return 'Events Staff'
-    default:
-      return 'Staff Member'
-  }
-}
+import { formatRoleLabel, normalizeRole } from '@/lib/roles'
 
 export default function AppShell({
   children,
@@ -216,7 +196,11 @@ export default function AppShell({
     },
   ]
 
-  const visibleNav = navItems.filter((item) => !role || item.allowedRoles.includes(role))
+  const effectiveRole = normalizeRole(role)
+  const visibleNav = navItems.filter((item) => {
+    if (item.href === '/home') return true
+    return effectiveRole ? item.allowedRoles.includes(effectiveRole) : false
+  })
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] text-[#1F2A24] font-work-sans flex flex-col md:flex-row selection:bg-[#A8763E]/20">

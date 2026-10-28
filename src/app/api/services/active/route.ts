@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 
@@ -93,7 +94,8 @@ export async function POST(request: Request) {
       }
     } catch (_) {}
 
-    if (callerRole !== 'super_admin' && callerRole !== 'attendance_admin') {
+    const effectiveRole = normalizeRole(callerRole)
+    if (effectiveRole !== 'super_admin' && effectiveRole !== 'attendance_admin') {
       return NextResponse.json(
         { error: 'Forbidden: only super_admin or attendance_admin can start service sessions' },
         { status: 403 }

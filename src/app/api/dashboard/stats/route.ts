@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 
@@ -53,13 +54,14 @@ export async function GET(request: Request) {
 
     // Role gate: Only super_admin or attendance_admin can view dashboard.
     // attendance_staff, finance_*, events_*, and NULL roles MUST receive 403 Forbidden.
+    const effectiveRole = normalizeRole(callerRole)
     const ALLOWED_DASHBOARD_ROLES = ['super_admin', 'attendance_admin']
-    if (!callerRole || !ALLOWED_DASHBOARD_ROLES.includes(callerRole)) {
+    if (!effectiveRole || !ALLOWED_DASHBOARD_ROLES.includes(effectiveRole)) {
       return NextResponse.json(
         {
           error:
             'Forbidden: super_admin or attendance_admin role required to access the combined attendance dashboard.',
-          userRole: callerRole || 'unknown',
+          userRole: effectiveRole || callerRole || 'unknown',
         },
         { status: 403 }
       )

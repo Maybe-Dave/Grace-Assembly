@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 
 export async function POST(request: Request) {
   try {
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       email,
-      role,
+      role: normalizeRole(role),
       name: person?.full_name ?? email,
       assigned_section: assignedSection,
       positions: Array.isArray(person?.positions) ? person.positions : [],

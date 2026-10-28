@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 
@@ -69,13 +70,14 @@ export async function POST(request: Request) {
     }
 
     // STRICT PERMISSION CHECK: Only 'super_admin' is permitted.
+    const effectiveRole = normalizeRole(callerRole)
     const ALLOWED_STAFF_APPROVAL_ROLES = ['super_admin']
-    if (!callerRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(callerRole)) {
+    if (!effectiveRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(effectiveRole)) {
       return NextResponse.json(
         {
           error:
             'Forbidden: Only Super Admin can approve or reject staff account requests.',
-          callerRole: callerRole || 'unauthenticated',
+          callerRole: effectiveRole || callerRole || 'unauthenticated',
         },
         { status: 403 }
       )

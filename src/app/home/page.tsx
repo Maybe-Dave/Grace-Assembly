@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import AppShell from '@/components/layout/AppShell'
 import PageHeader from '@/components/layout/PageHeader'
+import { normalizeRole } from '@/lib/roles'
 
 interface ActiveService {
   id: string
@@ -177,12 +178,13 @@ export default function HomePage() {
           }
         } catch (_) {}
 
-        setUserRole(role)
+        const effectiveRole = normalizeRole(role) || role
+        setUserRole(effectiveRole)
 
         await loadActiveService()
 
         // Load stats for admin roles
-        if (role === 'super_admin' || role === 'attendance_admin') {
+        if (effectiveRole === 'super_admin' || effectiveRole === 'attendance_admin') {
           await loadDashboardStats(session.access_token)
           // Also fetch queue counts
           fetch('/api/intake/pending', {
@@ -192,7 +194,7 @@ export default function HomePage() {
             .then((d) => setPendingQueueCount(d?.count || 0))
             .catch(() => {})
 
-          if (role === 'super_admin') {
+          if (effectiveRole === 'super_admin') {
             fetch('/api/staff-requests/pending', {
               headers: { Authorization: `Bearer ${session.access_token}` },
             })
@@ -603,6 +605,37 @@ export default function HomePage() {
                   account credentials and permissions are configured and will activate automatically
                   once launched.
                 </p>
+              </div>
+            )}
+
+            {/* =========================================================================
+                5. UNASSIGNED / PENDING ROLE VIEW: Reassuring message instead of blank screen
+            ========================================================================= */}
+            {(!userRole ||
+              (!['super_admin', 'attendance_admin', 'attendance_staff'].includes(userRole) &&
+                !userRole.startsWith('finance_') &&
+                !userRole.startsWith('events_'))) && (
+              <div className="bg-[#FAF8F5] border border-[#6B4226]/15 rounded-[16px] p-8 sm:p-12 text-center space-y-4 shadow-2xs">
+                <div className="w-14 h-14 rounded-full bg-[#A8763E]/12 text-[#A8763E] flex items-center justify-center mx-auto text-[26px]">
+                  👤
+                </div>
+                <h2 className="font-fraunces text-[24px] font-bold text-[#1F2A24]">
+                  Welcome to Grace Assembly
+                </h2>
+                <p className="text-[14px] text-[#1F2A24]/70 max-w-[480px] mx-auto leading-relaxed">
+                  Your church account is signed in as <strong className="text-[#1F2A24]">{userEmail}</strong>.
+                  Your staff role permissions are currently being prepared or updated by church administrators.
+                  Once approved, your ministry controls will appear here.
+                </p>
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 rounded-[8px] bg-[#A8763E] text-[#FDFBF7] text-[13px] font-semibold hover:bg-[#976835] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    ↻ Refresh Permissions
+                  </button>
+                </div>
               </div>
             )}
           </div>

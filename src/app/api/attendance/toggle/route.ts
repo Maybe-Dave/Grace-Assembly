@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 
 export async function POST(request: Request) {
   try {
@@ -55,8 +56,9 @@ export async function POST(request: Request) {
       }
     } catch (_) {}
 
+    const effectiveRole = normalizeRole(callerRole)
     const ALLOWED_ROLES = ['super_admin', 'attendance_admin', 'attendance_staff']
-    if (!callerRole || !ALLOWED_ROLES.includes(callerRole)) {
+    if (!effectiveRole || !ALLOWED_ROLES.includes(effectiveRole)) {
       return NextResponse.json(
         { error: 'Forbidden: attendance staff or admin role required' },
         { status: 403 }

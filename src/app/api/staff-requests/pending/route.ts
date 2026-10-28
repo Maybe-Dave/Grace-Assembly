@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { normalizeRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 
@@ -59,13 +60,14 @@ export async function GET(request: Request) {
 
     // STRICT PERMISSION CHECK: super_admin ONLY.
     // Domain admins (e.g. attendance_admin), staff, and unauthenticated callers MUST get 403.
+    const effectiveRole = normalizeRole(callerRole)
     const ALLOWED_STAFF_APPROVAL_ROLES = ['super_admin']
-    if (!callerRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(callerRole)) {
+    if (!effectiveRole || !ALLOWED_STAFF_APPROVAL_ROLES.includes(effectiveRole)) {
       return NextResponse.json(
         {
           error:
             'Forbidden: Super Admin role required to access staff approvals. Domain admins and staff roles are not permitted.',
-          callerRole: callerRole || 'unauthenticated',
+          callerRole: effectiveRole || callerRole || 'unauthenticated',
         },
         { status: 403 }
       )
