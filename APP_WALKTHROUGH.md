@@ -80,7 +80,7 @@ The application utilizes a tailored design language reflecting church heritage a
 ## 4. Architectural Features & System Modules
 
 ### 4.1. Authentication & Onboarding
-- **Passwordless Email OTP**: Users sign in with their church email. Supabase generates a secure 6-digit code.
+- **Passwordless Email OTP**: Users sign in with their church email. Supabase generates a secure 8-digit code.
 - **Pre-Flight Staff Verification (`/api/auth/check-staff`)**: Verifies the email belongs to a registered staff member before dispatching codes, preventing unauthorized OTP spam.
 - **Staff Onboarding Request (`/staff-request`)**: Volunteers apply by providing their full name, email, phone, requested role, and section.
 - **Super Admin Approvals (`/staff-approvals`)**: Gated exclusively to `super_admin`. Allows the administrator to review requests, adjust role or section assignments in-flight, and activate access.
